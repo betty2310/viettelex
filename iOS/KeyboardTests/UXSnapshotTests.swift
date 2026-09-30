@@ -53,6 +53,13 @@ final class UXSnapshotTests: XCTestCase {
                     kb.debugDomainHold(key, keepOpen: true)
                 }
             }
+            // Công tắc Mẫu câu tắt: thanh gợi ý không còn nút ☰ (⌄ thu gọn giữ nguyên).
+            let tdef = UserDefaultsProvider.shared
+            let tSaved = tdef?.object(forKey: "templatesEnabled")
+            tdef?.set(false, forKey: "templatesEnabled")
+            try shot("bar-templatesoff-\(s)", dark: dark) { $0.showSuggestions(.init(nextWords: ["Em", "Anh", "Tôi"])) }
+            tdef?.set(tSaved, forKey: "templatesEnabled")
+            try shot("bar-templateson-\(s)", dark: dark) { $0.showSuggestions(.init(nextWords: ["Em", "Anh", "Tôi"])) }
             // Balloon hàng đầu (giữ "e" ra "3") — có và không có thanh gợi ý (Phil 30/09).
             try shot("balloon-bar-\(s)", dark: dark) { _ = $0.debugBalloon(letter: "e", text: "3") }
             try shot("balloon-nobar-\(s)", dark: dark) { kb in

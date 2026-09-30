@@ -890,7 +890,28 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         }
     }
 
-    private var userTemplates = KeyboardView.templates
+    /// Danh sách mẫu câu — đọc LƯỜI lúc mở plane mẫu câu (nil = chưa đọc). Tắt "Mẫu câu"
+    /// (Tính Năng → Gõ tắt) ⇒ không bao giờ đọc App Group / parse YAML bundle (0 chi phí).
+    private var userTemplatesCache: [(label: String, text: String)]?
+    private var userTemplates: [(label: String, text: String)] {
+        if let c = userTemplatesCache { return c }
+        let c: [(label: String, text: String)]
+        if let raw = UserDefaultsProvider.shared?.array(forKey: "userTemplates") as? [[String: String]] {
+            c = raw.compactMap { e in
+                guard let t = e["text"], !t.isEmpty else { return nil }
+                return (e["label"] ?? "", t)
+            }
+        } else {
+            c = Self.templates
+        }
+        userTemplatesCache = c
+        return c
+    }
+    #if DEBUG
+    var debugTemplatesLoaded: Bool { userTemplatesCache != nil }
+    var debugBurgerVisible: Bool { burgerZone.superview != nil && !burgerZone.isHidden }
+    var debugInTemplates: Bool { plane == .templates }
+    #endif
     private var templatesEnabled = true
     private var templatesActive: Bool { plane == .templates }
     /// Chèn thẳng vào input, KHÔNG qua máy học từ (câu nhiều từ làm bẩn model).
@@ -1309,14 +1330,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let d = UserDefaultsProvider.shared
         templatesEnabled = d?.object(forKey: "templatesEnabled") == nil
             || d?.bool(forKey: "templatesEnabled") == true
-        if let raw = d?.array(forKey: "userTemplates") as? [[String: String]] {
-            userTemplates = raw.compactMap { e in
-                guard let t = e["text"], !t.isEmpty else { return nil }
-                return (e["label"] ?? "", t)
-            }
-        } else {
-            userTemplates = Self.templates
-        }
+        userTemplatesCache = nil      // đọc lại (lười) lần mở plane mẫu câu kế — app có thể vừa sửa
         if !templatesEnabled, plane == .templates { plane = .letters }
         rebuild()
     }

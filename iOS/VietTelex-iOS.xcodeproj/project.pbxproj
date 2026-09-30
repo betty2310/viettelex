@@ -286,6 +286,7 @@
 		FAA72FF64936E572745B57FC /* TouchTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E700B266A47DAAAD5A72343 /* TouchTarget.swift */; };
 		FB860CBFB131AA4028FD0DCC /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDB49FABB2F78D2A96902FA /* L10n.swift */; };
 		FC72A7CB20D1E77AAF211C4C /* add-tones.txt in Resources */ = {isa = PBXBuildFile; fileRef = D4F06F2D8BF071889A8590BF /* add-tones.txt */; };
+		FD519D91DCB5A230E0E238E8 /* TemplatesToggleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A110506AFC988F434CA23CB6 /* TemplatesToggleTests.swift */; };
 		FDD2D7137E50BB3DDBC3CAE4 /* KeyHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF99EE8945374D95A9001E47 /* KeyHaptics.swift */; };
 		FE2B9309D2217292E28A9A44 /* VNLexicon2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E29815B4F2B0747B961A561 /* VNLexicon2.swift */; };
 		FE8D39EE697955FE188DC2B0 /* KeyHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF99EE8945374D95A9001E47 /* KeyHaptics.swift */; };
@@ -432,6 +433,7 @@
 		95F2B6D4AD796E9D33B623BA /* DomainPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainPopup.swift; sourceTree = "<group>"; };
 		9A253A0432EF946B10B4E511 /* SyllableLM.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllableLM.swift; sourceTree = "<group>"; };
 		A087DB1153D19136851D711B /* KeyboardThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardThemeTests.swift; sourceTree = "<group>"; };
+		A110506AFC988F434CA23CB6 /* TemplatesToggleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatesToggleTests.swift; sourceTree = "<group>"; };
 		A14878A23261C8A092054E6F /* RamBreakdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RamBreakdownTests.swift; sourceTree = "<group>"; };
 		A1859475A5F95F02805768CA /* MathResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathResults.swift; sourceTree = "<group>"; };
 		A3125082F1A2E31162FC7045 /* KeyLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyLayoutTests.swift; sourceTree = "<group>"; };
@@ -687,6 +689,7 @@
 				821BD7CBEE8349CC782C3E41 /* SwipeTypingTests.swift */,
 				C5BC327E13C13C9D09229C0F /* SyllableLMTests.swift */,
 				E4FC671773198BA581BA9228 /* TemplateEditTests.swift */,
+				A110506AFC988F434CA23CB6 /* TemplatesToggleTests.swift */,
 				D0E5388BE246A2014C812518 /* TextToolsTests.swift */,
 				6C928B7D91A4C54D1642E70F /* TouchTargetTests.swift */,
 				C0D2E54E996214AA4F8CB065 /* TrackpadTests.swift */,
@@ -1259,6 +1262,7 @@
 				C503CFFEFC1A127BE3B99F82 /* SyncMerge.swift in Sources */,
 				2338E959472A88B21C366BBF /* TemplateEdit.swift in Sources */,
 				D0AB1A2F822234A53F66D19B /* TemplateEditTests.swift in Sources */,
+				FD519D91DCB5A230E0E238E8 /* TemplatesToggleTests.swift in Sources */,
 				F2EAFEC76076EAC9B3E82E15 /* TextToolRunner.swift in Sources */,
 				B449EAEFEA69CB861489859C /* TextTools.swift in Sources */,
 				1E3BA256F62480AA94474E72 /* TextToolsTests.swift in Sources */,

@@ -206,7 +206,7 @@ enum L10n {
         "Mạng neural chạy hoàn toàn trên máy, chấm cùng bộ giải mã. Tốn thêm ~3 MB bộ nhớ.": "A neural network that runs entirely on device and scores alongside the decoder. Uses ~3 MB more memory.",
         "Tự tắt khi dùng VoiceOver và ở ô email/mật khẩu/URL.": "Turns off automatically with VoiceOver and in email/password/URL fields.",
         "Vuốt thử từng từ, xem bàn phím đọc đúng bao nhiêu.": "Swipe words one by one and see how often the keyboard gets them right.",
-        "Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu.": "The ☰ button on the keyboard inserts ready-made text — manage it in the Snippets tab.",
+        "Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu. Tắt: ẩn nút ☰ và tab Mẫu Câu.": "The ☰ button on the keyboard inserts ready-made text — manage it in the Snippets tab. Off: hides the ☰ button and the Snippets tab.",
         "Thêm hàng 1 … 0 trên hàng chữ (bàn phím cao thêm ~¾ hàng).": "Adds a 1 … 0 row above the letters (keyboard gets ~¾ row taller).",
         "Giữ q … p để gõ 1 … 0 (số nhỏ ở góc phím).": "Hold q … p to type 1 … 0 (small digits in the key corners).",
         "Giữ phím hàng 2, 3 để ra ký tự đặc biệt": "Hold row 2, 3 keys for symbols",

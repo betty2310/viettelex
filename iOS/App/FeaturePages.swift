@@ -115,7 +115,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Luyện vuốt"), keywords: "practice swipe", page: .goVuot),
             .init(viTitle: LK("Gõ tắt"), keywords: "shortcut viết tắt", page: .goTat),
             .init(viTitle: LK("Bảng gõ tắt"), keywords: "shortcut yaml import export", page: .goTat),
-            .init(viTitle: LK("Mẫu câu"), keywords: "template câu soạn sẵn", page: .goTat),
+            .init(viTitle: LK("Mẫu câu"), keywords: "template câu soạn sẵn snippets tắt ẩn tab ☰", page: .goTat),
             .init(viTitle: LK("Hàng phím số"), keywords: "number row số", page: .phim),
             .init(viTitle: LK("Giữ phím ra ký tự đặc biệt"), keywords: "ký hiệu symbol @ # giữ lâu", page: .phim),
             .init(viTitle: LK("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh"), keywords: "space ngôn ngữ english language", page: .phim),
@@ -484,7 +484,7 @@ struct GoTatPage: View {
         FeaturePageList(page: .goTat) {
             ShortcutsSection()
             Section {
-                settingToggle(L("Mẫu câu"), L("Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu."), isOn: $templatesEnabled)
+                settingToggle(L("Mẫu câu"), L("Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu. Tắt: ẩn nút ☰ và tab Mẫu Câu."), isOn: $templatesEnabled)
             } header: { Text(L("Mẫu câu")) }
         }
     }
