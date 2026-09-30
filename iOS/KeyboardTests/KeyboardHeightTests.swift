@@ -9,7 +9,7 @@ final class KeyboardHeightTests: XCTestCase {
 
     func testKeysModeStripOnTop() {
         let c = KeyLayout.chrome(keyArea: 212, strip: 34, mode: .keys)
-        XCTAssertEqual(c, KeyLayout.Chrome(rowsTop: 34, rows: 212, total: 246))
+        XCTAssertEqual(c, KeyLayout.Chrome(rowsTop: 34, rows: 212, total: 246, minTop: KeyLayout.balloonHeadroom))
     }
 
     func testEmojiGridTakesStripSameTotal() {
@@ -78,18 +78,23 @@ final class KeyboardHeightTests: XCTestCase {
         XCTAssertEqual(kb.debugRequestedHeight, h0)
     }
 
-    /// Host cấp THIẾU (không cho lại 34pt strip): strip co, phím giữ nguyên chiều cao.
+    /// Host cấp THIẾU: strip co trước (tới sàn headroom balloon 20pt), phím giữ nguyên;
+    /// thiếu quá sàn thì phím mới co — headroom balloon KHÔNG bao giờ mất (Phil 30/09).
     @MainActor func testHostShortfallSqueezesStripNotKeys() throws {
         let (kb, host) = makeKeyboard()
         _ = host
         let full = try letterRowHeight(kb)
-        kb.frame.size.height = kb.debugRequestedHeight - 34
+        let spare = kb.debugRowsTop - KeyLayout.balloonHeadroom         // 34 − 20
+        kb.frame.size.height = kb.debugRequestedHeight - spare
         kb.setNeedsLayout(); kb.layoutIfNeeded()
         let squeezed = try letterRowHeight(kb)
         XCTAssertEqual(squeezed.q, full.q, accuracy: 0.5)
         XCTAssertEqual(squeezed.z, full.z, accuracy: 0.5)
-        // Không tràn khỏi đỉnh view.
-        XCTAssertGreaterThanOrEqual(try XCTUnwrap(kb.debugRowFrames().first).minY, -0.5)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(kb.debugRowFrames().first).minY, KeyLayout.balloonHeadroom - 0.5)
+        kb.frame.size.height = kb.debugRequestedHeight - 34 - 20
+        kb.setNeedsLayout(); kb.layoutIfNeeded()
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(kb.debugRowFrames().first).minY, KeyLayout.balloonHeadroom - 0.5,
+                                    "headroom balloon giữ cả khi host thiếu nhiều")
     }
 
     /// Tìm emoji: 4 hàng chữ cao y như plane chữ.
@@ -107,6 +112,70 @@ final class KeyboardHeightTests: XCTestCase {
             let s = try letterRowHeight(kb)
             XCTAssertEqual(s.q, full.q, accuracy: 0.5, "suggestions \(suggestions)")
             XCTAssertEqual(s.z, full.z, accuracy: 0.5, "suggestions \(suggestions)")
+        }
+    }
+}
+
+/// Regression (Phil 30/09/2026, máy thật sau 1.2.3): giữ "e" ra "3" — balloon bị cắt nửa ở
+/// mép trên bàn phím khi KHÔNG có thanh gợi ý phía trên (tắt gợi ý / thu gọn / host cấp
+/// thiếu làm strip nhường hết). Extension không vẽ ra ngoài inputView ⇒ balloon hàng đầu
+/// phải nằm TRỌN trong view, chữ không bị cắt.
+final class BalloonHeadroomTests: XCTestCase {
+    private var width: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 834 : 390 }
+
+    @MainActor private func assertBalloonFits(_ kb: KeyboardView, _ what: String) throws {
+        kb.setNeedsLayout(); kb.layoutIfNeeded()
+        for (key, text) in [("e", "3"), ("q", "1"), ("p", "0"), ("e", "E")] {
+            let b = try XCTUnwrap(kb.debugBalloon(letter: key, text: text), what)
+            XCTAssertGreaterThanOrEqual(b.frame.minY, -0.01, "\(what) \(key): balloon vượt mép trên")
+            XCTAssertLessThanOrEqual(b.frame.maxY, kb.bounds.height + 0.01, what)
+            XCTAssertGreaterThanOrEqual(b.label.minY, -0.01, "\(what) \(key): chữ bị cắt")
+            XCTAssertLessThanOrEqual(b.fontSize, b.label.height, "\(what) \(key): chữ cao hơn bubble")
+        }
+    }
+
+    @MainActor private func make(suggestions: Bool, reserve: Bool? = nil,
+                                 shortfall: CGFloat = 0) -> (KeyboardView, UIView) {
+        let kb = KeyboardView(needsGlobe: false, inputController: nil) { _ in }
+        let host = UIView(frame: CGRect(x: 0, y: 0, width: width, height: 400))
+        host.overrideUserInterfaceStyle = .light
+        host.addSubview(kb)
+        kb.frame = CGRect(x: 0, y: 0, width: width, height: 300)
+        kb.applyAppearance(.light, style: .light)
+        kb.configureInputKind(.normal)
+        kb.setSuggestionsEnabled(suggestions, reserveStrip: reserve)
+        kb.layoutIfNeeded()
+        kb.frame.size.height = kb.debugRequestedHeight - shortfall
+        return (kb, host)
+    }
+
+    @MainActor func testBalloonInsideBoundsAllConfigs() throws {
+        let configs: [(String, Bool, Bool?, CGFloat)] = [
+            ("gợi ý bật", true, nil, 0),
+            ("gợi ý tắt", false, nil, 0),
+            ("ô từ chối gợi ý", false, true, 0),
+            ("host thiếu 34pt", true, nil, 34),
+            ("host thiếu 60pt", true, nil, 60),
+            ("gợi ý tắt + host thiếu", false, nil, 20),
+        ]
+        for (what, sug, reserve, short) in configs {
+            let (kb, host) = make(suggestions: sug, reserve: reserve, shortfall: short)
+            try assertBalloonFits(kb, what)
+            withExtendedLifetime(host) {}
+        }
+        let (kb, host) = make(suggestions: true)
+        kb.debugEnterEmojiSearch()
+        kb.frame.size.height = kb.debugRequestedHeight
+        try assertBalloonFits(kb, "tìm emoji")
+        withExtendedLifetime(host) {}
+    }
+
+    /// Mọi strip (tắt 0 / thu gọn 14 / mở 34) đều chừa headroom balloon phía trên phím.
+    func testHeadroomAlwaysReserved() {
+        for strip: CGFloat in [0, 14, 34] {
+            let c = KeyLayout.chrome(keyArea: 212, strip: strip, mode: .keys)
+            XCTAssertGreaterThanOrEqual(c.rowsTop, KeyLayout.balloonHeadroom)
+            XCTAssertGreaterThanOrEqual(c.minTop, KeyLayout.balloonHeadroom)
         }
     }
 }

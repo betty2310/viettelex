@@ -137,7 +137,10 @@ final class KeyGeometryTests: XCTestCase {
         let kb = KeyboardView(needsGlobe: false, inputController: nil, onKey: onKey)
         let host = UIView(frame: CGRect(x: 0, y: 0, width: 402, height: 212))
         host.addSubview(kb)
-        kb.frame = host.bounds          // gợi ý tắt: strip 0, vùng phím 212 = cả view
+        kb.frame = host.bounds          // gợi ý tắt: strip 0 ⇒ chỉ headroom balloon trên vùng phím 212
+        kb.layoutIfNeeded()
+        // Host cấp đúng mức xin (212 + headroom balloon 20 — KeyLayout.balloonHeadroom).
+        host.frame.size.height = kb.debugRequestedHeight; kb.frame = host.bounds
         kb.layoutIfNeeded()
         return (kb, host)
     }
@@ -150,7 +153,7 @@ final class KeyGeometryTests: XCTestCase {
         try XCTSkipIf(isPad)
         let (kb, _) = makeKeyboard()
         let h = kb.bounds.height
-        XCTAssertEqual(h, 212, accuracy: 0.5)
+        XCTAssertEqual(h, 212 + KeyLayout.balloonHeadroom, accuracy: 0.5)   // vùng phím 212 + headroom balloon
         let stock = KeyGeometry.Stock.rowCentersFromScreenBottom.map {
             $0 - KeyGeometry.Stock.viewBottomAboveScreenBottom
         }
@@ -419,7 +422,8 @@ final class KeyGeometryTests: XCTestCase {
         var typed: [KeyboardView.Key] = []
         let (kb, _) = makeKeyboard { typed.append($0) }
         let q = try XCTUnwrap(kb.debugLetterFrame("q"))
-        kb.debugTouch(from: CGPoint(x: q.midX, y: 1), through: [], start: 100)
+        let areaTop = q.minY - KeyGeometry.rowGap          // đỉnh vùng phím (dưới headroom balloon)
+        kb.debugTouch(from: CGPoint(x: q.midX, y: areaTop + 1), through: [], start: 100)
         guard case .letter(let c)? = typed.first else { return XCTFail("mất phím: \(typed)") }
         XCTAssertEqual(String(c).lowercased(), "q")
     }

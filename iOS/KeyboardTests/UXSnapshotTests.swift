@@ -45,6 +45,13 @@ final class UXSnapshotTests: XCTestCase {
                 kb.debugControl("Emoji")?.sendActions(for: .touchUpInside)
             }
             try shot("emojisearch-\(s)", dark: dark) { $0.debugEnterEmojiSearch() }
+            // Balloon hàng đầu (giữ "e" ra "3") — có và không có thanh gợi ý (Phil 30/09).
+            try shot("balloon-bar-\(s)", dark: dark) { _ = $0.debugBalloon(letter: "e", text: "3") }
+            try shot("balloon-nobar-\(s)", dark: dark) { kb in
+                kb.setSuggestionsEnabled(false)
+                kb.setNeedsLayout(); kb.layoutIfNeeded()
+                _ = kb.debugBalloon(letter: "e", text: "3")
+            }
             // Giữ phím ra số / ký hiệu (issue #98): nhãn nhỏ góc trên-phải.
             try shot("alternates-\(s)", dark: dark) { $0.configureKeyAlternates(numbers: true, symbols: true) }
         }

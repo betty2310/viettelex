@@ -46,18 +46,31 @@ enum KeyLayout {
         var rowsTop: CGFloat   // strip phía trên vùng hàng
         var rows: CGFloat      // chiều cao vùng hàng (kể cả ô tìm emoji)
         var total: CGFloat     // chiều cao xin host
+        /// Sàn khoảng trên hàng phím khi host cấp THIẾU (strip chỉ nhường tới đây).
+        var minTop: CGFloat = 0
     }
+
+    /// Khoảng trống tối thiểu phía trên hàng phím đầu cho balloon/popup ký tự phụ.
+    /// Extension KHÔNG vẽ được ra ngoài inputView ⇒ chỗ này phải nằm trong bàn phím.
+    /// Bug Phil 30/09/2026: tắt/thu gọn thanh gợi ý (strip 0/14) hoặc host cấp thiếu
+    /// (strip nhường hết) ⇒ balloon "3" trên phím "e" bị cắt nửa ở mép trên. Stock cũng
+    /// chừa đệm trên. 20pt + khe hàng 10 ⇒ bubble ≥ 24pt (chữ co cho vừa, không cắt).
+    static let balloonHeadroom: CGFloat = 20
     /// Hàng ô tìm emoji (ô 38pt + đệm 5/3) — như dải tìm của stock.
     static let emojiSearchRow: CGFloat = 46
     static func emojiSearchBarHeight(strip: CGFloat) -> CGFloat { max(emojiSearchRow, strip) }
 
     static func chrome(keyArea: CGFloat, strip: CGFloat, mode: ChromeMode) -> Chrome {
+        // Strip hiệu dụng: không thấp hơn headroom balloon (bar tắt / thu gọn vẫn chừa đệm).
+        let strip = max(strip, balloonHeadroom)
         switch mode {
-        case .keys: return Chrome(rowsTop: strip, rows: keyArea, total: keyArea + strip)
+        case .keys: return Chrome(rowsTop: strip, rows: keyArea, total: keyArea + strip,
+                                  minTop: balloonHeadroom)
         case .emoji: return Chrome(rowsTop: 0, rows: keyArea + strip, total: keyArea + strip)
         case .emojiSearch:
             // Ô tìm nằm chỗ strip (bar gợi ý ẩn); phần nó cao hơn strip thì bàn phím cao
             // thêm như stock — trước đây nó chen vào keyArea ⇒ 4 hàng chữ bị ép còn ~80%.
+            // Ô tìm (≥ 46) cao hơn headroom ⇒ balloon hàng chữ đầu có chỗ trong ô tìm.
             let bar = emojiSearchBarHeight(strip: strip)
             return Chrome(rowsTop: 0, rows: keyArea + bar, total: keyArea + bar)
         }

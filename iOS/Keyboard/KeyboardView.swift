@@ -110,6 +110,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// Sàn chiều cao vùng hàng (@999, trên rowsTop @998): host cấp THIẾU thì strip gợi ý
     /// nhường trước, hàng phím giữ đủ cao (KeyLayout.chrome).
     private var rowsMinHeightConstraint: NSLayoutConstraint?
+    private var rowsMinTopConstraint: NSLayoutConstraint?
     private var rowsTopConstraint: NSLayoutConstraint?
     private var rowsLeftConstraint: NSLayoutConstraint?
     private var rowsRightConstraint: NSLayoutConstraint?
@@ -192,9 +193,15 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // không co (bug 1.2.x: phím lùn ở Notes/Facebook). rows.top ≥ view.top (required)
         // chặn hàng phím tràn khỏi đỉnh khi host cấp thiếu cả keyArea.
         let rowsTop = rowsContainer.topAnchor.constraint(equalTo: topAnchor, constant: 0)
-        rowsTop.priority = UILayoutPriority(998)
+        rowsTop.priority = UILayoutPriority(997)
         let rowsMin = rowsContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 212)
-        rowsMin.priority = UILayoutPriority(999)
+        rowsMin.priority = UILayoutPriority(998)
+        // Sàn headroom balloon (999, trên rowsMin): host cấp thiếu thì strip nhường tới sàn
+        // này rồi phím mới co — balloon hàng đầu luôn có chỗ (bug Phil 30/09/2026).
+        let rowsMinTop = rowsContainer.topAnchor.constraint(greaterThanOrEqualTo: topAnchor,
+                                                            constant: KeyLayout.balloonHeadroom)
+        rowsMinTop.priority = UILayoutPriority(999)
+        rowsMinTopConstraint = rowsMinTop
         // Hai mép là constraint GIỮ LẠI: chế độ một tay thụt vào (applyOneHand).
         let rowsLeft = rowsContainer.leftAnchor.constraint(equalTo: leftAnchor)
         let rowsRight = rowsContainer.rightAnchor.constraint(equalTo: rightAnchor)
@@ -207,6 +214,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             rowsMax,
             rowsTop,
             rowsMin,
+            rowsMinTop,
             rowsContainer.topAnchor.constraint(greaterThanOrEqualTo: topAnchor),
             rowsContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: 0),
         ])
@@ -624,6 +632,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if heightConstraint?.constant != c.total { heightConstraint?.constant = c.total }
         if rowsHeightConstraint?.constant != c.rows { rowsHeightConstraint?.constant = c.rows }
         if rowsMinHeightConstraint?.constant != c.rows { rowsMinHeightConstraint?.constant = c.rows }
+        if rowsMinTopConstraint?.constant != c.minTop { rowsMinTopConstraint?.constant = c.minTop }
         if rowsMaxHeightConstraint?.constant != c.rows + 60 { rowsMaxHeightConstraint?.constant = c.rows + 60 }
         let barH = KeyLayout.emojiSearchBarHeight(strip: strip)
         if let h = searchBarHeight, h.constant != barH { h.constant = barH }
@@ -2851,6 +2860,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 shape.path = p.cgPath
                 layer.shadowPath = p.cgPath
                 label.frame = CGRect(x: 0, y: 0, width: bubbleW, height: bubbleH)
+                // Bubble thấp (ít headroom): co chữ cho vừa — không để glyph bị cắt nửa.
+                let size = min(34, (bubbleH * 0.9).rounded())
+                if label.font.pointSize != size { label.font = .systemFont(ofSize: size) }
             }
             shape.fillColor = fill.cgColor
             label.textColor = ink
@@ -2873,9 +2885,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private func showBalloon(over key: UIView, text: String, force: Bool = false) {
         guard keyPreviewEnabled || force else { return }
         let f = convert(key.bounds, from: key)
-        // Strip gợi ý (36 mở / 14 thu gọn) = headroom phía trên hàng phím đầu —
-        // cho balloon leo vào đó thay vì kẹp sát -6.
-        let topLimit: CGFloat = (rowsTopConstraint?.constant ?? 0) > 0 ? 0 : -6
+        // Không bao giờ vượt mép trên view (extension bị cắt ở đó) — headroom luôn có
+        // (KeyLayout.balloonHeadroom); bubble thấp thì chữ co cho vừa.
+        let topLimit: CGFloat = 0
         if balloon.superview == nil { addSubview(balloon) }
         balloon.present(keyRect: f, text: text, fill: palette.balloon.ui, ink: palette.ink.ui, topLimit: topLimit)
     }
@@ -3773,8 +3785,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let l = DomainPopup.layout(keyMidX: key.midX, itemWidth: itemW, count: choices.count,
                                    containerWidth: bounds.width)
         let panelH: CGFloat = Self.isPad ? 52 : 46
-        let topLimit: CGFloat = (rowsTopConstraint?.constant ?? 0) > 0 ? 0 : -6
-        let top = max(key.minY - 8 - panelH, topLimit)
+        let top = max(key.minY - 8 - panelH, 0)       // không vượt mép trên (bị cắt)
         let p = domainLastPoint ?? CGPoint(x: key.midX, y: key.midY)
         let sel = DomainPopup.index(at: p, startX: p.x, layout: l, top: top, bottom: key.maxY)
         domainHold = (b, choices, l, p.x, top, key.maxY, sel)
@@ -4445,6 +4456,14 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     var debugPlaneName: String { "\(plane)" }
     var debugShiftOn: Bool { shift != .off }
+    /// Test hook: hiện balloon trên phím chữ `s` (như chạm / giữ ra ký tự phụ `text`), trả
+    /// frame balloon + khung chữ + cỡ chữ (toạ độ self).
+    func debugBalloon(letter s: String, text: String) -> (frame: CGRect, label: CGRect, fontSize: CGFloat)? {
+        guard let b = letterKeys.first(where: { $0.base == s })?.button else { return nil }
+        showBalloon(over: b, text: text, force: true)
+        let l = balloon.label
+        return (balloon.frame, convert(l.bounds, from: l), l.font.pointSize)
+    }
     /// Test hook: chiều cao xin host + vùng hàng (constant constraint).
     var debugRequestedHeight: CGFloat { heightConstraint?.constant ?? 0 }
     var debugRowsTop: CGFloat { rowsTopConstraint?.constant ?? 0 }
