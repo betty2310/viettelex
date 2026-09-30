@@ -160,6 +160,7 @@ targets:
       - Keyboard/SpaceFlick.swift
       - Keyboard/KeyAlternates.swift
       - Keyboard/DomainPopup.swift
+      - Keyboard/KeyVariants.swift
       - Keyboard/SwipeRevise.swift
       - App/Practice/SwipePractice.swift
       - App/Backup/BackupFormat.swift

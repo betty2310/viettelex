@@ -2912,6 +2912,13 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             self?.typedInSymbolPlane = true
             self?.tapped(.text(b?.takePadAlt() == true ? (hint ?? s) : s))
         }
+        // Giữ ra hàng biến thể như stock (KeyVariants) — chỉ bàn số/ký hiệu, phím KHÔNG có
+        // nhãn phụ iPad (nhãn phụ đã dùng cử chỉ giữ). Chạm thường vẫn chèn ký tự gốc.
+        if hint == nil {
+            let v = KeyVariants.variants(for: s, symbolPlane: plane == .numbers || plane == .symbols,
+                                         numericField: inputKind == .number)
+            if !v.isEmpty { armDomainHold(b, choices: v, variants: true) }
+        }
         return b
     }
 
@@ -3742,7 +3749,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// mới tạo view), phím chờ chốt đổi thành "chèn đuôi đang chọn" — chốt lúc nhấc / khi ngón
     /// khác chạm y như "." ⇒ từ đang gõ được chốt cùng đường. Trượt xa ⇒ không chọn ⇒ nhấc
     /// không chèn gì.
-    private func armDomainHold(_ b: KeyButton, choices: [String]) {
+    private func armDomainHold(_ b: KeyButton, choices: [String], variants: Bool = false) {
         b.addTarget(self, action: #selector(domainTouch(_:event:)),
                     for: [.touchDown, .touchDragInside, .touchDragOutside])
         b.addAction(UIAction { [weak self, weak b] _ in
@@ -3750,7 +3757,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             self.domainTimer?.cancel()
             let w = DispatchWorkItem { [weak self, weak b] in
                 guard let self, let b, b.isTracking else { return }
-                self.fireDomainHold(b, choices: choices)
+                self.fireDomainHold(b, choices: choices, variants: variants)
             }
             self.domainTimer = w
             DispatchQueue.main.asyncAfter(deadline: .now() + KeyAlternates.holdDelay, execute: w)
@@ -3769,7 +3776,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if domainHold?.button === sender { domainMoved(to: p) }
     }
 
-    private func fireDomainHold(_ b: KeyButton, choices: [String]) {
+    /// `variants`: hàng biến thể ký tự (KeyVariants) — ô hẹp hơn, chữ to hơn đuôi tên miền.
+    private func fireDomainHold(_ b: KeyButton, choices: [String], variants: Bool = false) {
         domainTimer = nil
         let id = ObjectIdentifier(b)
         guard commits.isArmed(id) else { return }       // "." đã chốt (ngón khác chạm trước)
@@ -3778,10 +3786,13 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             guard let self else { return }
             let s = self.domainHold.flatMap { h in h.sel.map { h.choices[$0] } }
             self.closeDomainPopup()
-            if let s { self.tapped(.text(s)) }
+            if let s {
+                if variants { self.typedInSymbolPlane = true }   // như chạm thường (space về chữ)
+                self.tapped(.text(s))
+            }
         }
         let key = convert(b.bounds, from: b)
-        let itemW: CGFloat = Self.isPad ? 68 : 56
+        let itemW: CGFloat = variants ? (Self.isPad ? 56 : 38) : (Self.isPad ? 68 : 56)
         let l = DomainPopup.layout(keyMidX: key.midX, itemWidth: itemW, count: choices.count,
                                    containerWidth: bounds.width)
         let panelH: CGFloat = Self.isPad ? 52 : 46
@@ -3796,7 +3807,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         guard let v = domainPopup else { return }
         if v.superview == nil { addSubview(v) }
         v.present(layout: l, key: key, top: top, panelH: panelH, choices: choices,
-                  fill: palette.balloon.ui, ink: palette.ink.ui, pad: Self.isPad)
+                  fill: palette.balloon.ui, ink: palette.ink.ui,
+                  fontSize: variants ? (Self.isPad ? 26 : 24) : (Self.isPad ? 20 : 18))
         v.select(sel)
         Self.flickFeedback()
     }
@@ -3855,7 +3867,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
 
         /// Toạ độ `key`, `layout`, `top` theo superview (KeyboardView).
         func present(layout l: DomainPopup.Layout, key: CGRect, top: CGFloat, panelH: CGFloat,
-                     choices: [String], fill: UIColor, ink: UIColor, pad: Bool) {
+                     choices: [String], fill: UIColor, ink: UIColor, fontSize: CGFloat) {
             let inset: CGFloat = 4
             let panel = CGRect(x: l.originX - inset, y: top, width: l.width + inset * 2, height: panelH)
             let f = panel.union(key)
@@ -3886,7 +3898,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 slots.append(r)
                 lb.isHidden = false
                 lb.text = choices[i]
-                lb.font = .systemFont(ofSize: pad ? 20 : 18)
+                lb.font = .systemFont(ofSize: fontSize)
                 lb.frame = r
             }
             isHidden = false
@@ -4315,8 +4327,17 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         domainLastPoint = CGPoint(x: key.midX, y: key.midY)
         b.sendActions(for: .touchDown)
         let armed = domainTimer != nil
-        if fire, armed { domainTimer?.cancel(); fireDomainHold(b, choices: DomainPopup.choices(
-            kind: inputKind, key: title, lettersPlane: plane == .letters)) }
+        if fire, armed {
+            domainTimer?.cancel()
+            let tlds = DomainPopup.choices(kind: inputKind, key: title, lettersPlane: plane == .letters)
+            if tlds.isEmpty {
+                fireDomainHold(b, choices: KeyVariants.variants(
+                    for: title, symbolPlane: plane == .numbers || plane == .symbols,
+                    numericField: inputKind == .number), variants: true)
+            } else {
+                fireDomainHold(b, choices: tlds)
+            }
+        }
         if dx != 0 || dy != 0 { domainMoved(to: CGPoint(x: key.midX + dx, y: key.midY + dy)) }
         if let s2 = secondTouch, let f2 = debugLetterFrame(s2) {
             let t2 = NSObject(), id2 = ObjectIdentifier(t2)
