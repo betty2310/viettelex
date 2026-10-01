@@ -2962,7 +2962,8 @@ final class TerminalTapController {
             let tokenPossible = allow.token && !shortcutTail.run.isEmpty   // chưa neo: emitBoundary xác nhận bằng AX
             if engine.isEmpty, !tokenPossible, SyntheticKeyboard.queueDrained() { return pass }
             lastTapKeyWasDigit = false
-            if emitBoundary(suppressAutoRestore: false, allowShortcuts: allow.word, allowToken: allow.token)
+            if emitBoundary(suppressAutoRestore: false, allowShortcuts: allow.word, allowToken: allow.token,
+                            allowAlnum: allow.alnum)
                 || !SyntheticKeyboard.queueDrained() {
                 reemit(keyCode: keyCode, string: nil, original: event)
                 return nil
@@ -3039,7 +3040,8 @@ final class TerminalTapController {
             let boundaryText = String(ch)
             let allow = ShortcutMatch.triggers(boundary: boundaryText, glued: lastTapKeyWasDigit)
             let rewrote = emitBoundary(suppressAutoRestore: isBracketUnichar(ch.utf16.first ?? unit),
-                                       allowShortcuts: allow.word, allowToken: allow.token)
+                                       allowShortcuts: allow.word, allowToken: allow.token,
+                                       allowAlnum: allow.alnum)
             lastTapKeyWasDigit = TelexInputController.gluesShortcutToken(ch.asciiValue)   // #82 số, #87 / # @ . _ -
             // Chip số (chỉ dạng tiền): dấu cách ngay sau cụm có chữ số ⇒ đọc màn hình (AX)
             // một lần sau khi phím tới app; terminal không có AX ⇒ dựng từ dòng phím (cụm neo).
@@ -3274,10 +3276,10 @@ final class TerminalTapController {
     /// true if anything was rewritten (caller then re-emits the boundary key after it).
     @discardableResult
     private func emitBoundary(suppressAutoRestore: Bool, allowShortcuts: Bool = true,
-                              allowToken: Bool = false) -> Bool {
+                              allowToken: Bool = false, allowAlnum: Bool = false) -> Bool {
         tapExpanded = nil
         lastCommitRaw = ""
-        let table = (allowShortcuts || allowToken) ? AppState.shared.shortcutTable : ShortcutTable()
+        let table = (allowShortcuts || allowToken || allowAlnum) ? AppState.shared.shortcutTable : ShortcutTable()
         // Capture BOTH forms before reset() wipes them. The composed word is what's on
         // screen (drives the backspace count); the raw keystrokes are what the user
         // actually typed.
@@ -3304,7 +3306,7 @@ final class TerminalTapController {
         let afterJump = shortcutTail.afterJump
         let match = ShortcutMatch.findForTap(
             in: table, composed: word, raw: rawWord, tail: shortcutTail,
-            allowWord: allowShortcuts, allowToken: allowToken) { token in
+            allowWord: allowShortcuts, allowToken: allowToken, allowAlnum: allowAlnum) { token in
                 let v = ShortcutScreen.tokenVerdict(token, caret: AXTextEdit.readCaret(),
                                                     read: { AXTextEdit.readString(at: $0.location, length: $0.length) })
                 DebugLog.log("shortcut token(tap): unanchored run, screen=\(v) afterJump=\(afterJump)")

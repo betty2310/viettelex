@@ -8,6 +8,8 @@
 //    tới phím THÔ ("dc" khớp "dc"), như macOS. Ưu tiên TRƯỚC tự khôi phục tiếng Anh.
 //  • khoá có KÝ HIỆU/SỐ ("->", "√√", "k2"): tra lúc gõ khoảng trắng/Enter, so với cả
 //    cụm ký tự liền nhau ngay trước con trỏ (từ khoảng trắng gần nhất).
+//  • khoá CHỮ+SỐ ("ad1", "2fa" — #109): như khoá ký hiệu/số nhưng nở cả ở dấu câu (như
+//    khoá chữ); VNI khớp qua phím thô ("ad1" soạn thành "ád").
 // Không nở khi từ dính liền sau chữ số (#82: "5h" giữ nguyên, "5h30") hoặc sau / # @
 // (#87: "/h3", đường dẫn, @mention) — như macOS gluesShortcutToken.
 // Giữ hoa theo cách gõ: ko → không, Ko → Không, KO → KHÔNG (khoá viết thường).
@@ -35,6 +37,18 @@ struct ShortcutTable: Equatable {
     /// Khoá thuần chữ — tra theo từ engine đang soạn.
     static func isWordKey(_ k: String) -> Bool { !k.isEmpty && k.allSatisfy { $0.isLetter } }
 
+    /// Khoá CHỮ+SỐ ("ad1", "sdt2", "2fa" — issue #109): chỉ chữ và chữ số, có cả hai. Đi
+    /// đường cụm (`tokenExpansion`) nhưng nở ở cùng ranh giới với khoá chữ
+    /// (`triggersAlnum`); VNI khớp qua phím thô của từ đang soạn (`wordExpansion`). Thuần
+    /// số ("123") vẫn là khoá ký hiệu/số. Khớp macOS App/Sources/Shortcuts.swift.
+    static func isAlnumKey(_ k: String) -> Bool {
+        var letter = false, digit = false
+        for c in k {
+            if c.isLetter { letter = true } else if c.isNumber { digit = true } else { return false }
+        }
+        return letter && digit
+    }
+
     /// Nội dung sẽ bung cho `typed` (đã áp hoa/thường), nil = không khớp.
     /// 1. khớp nguyên văn; 2. khoá viết thường + `typed` viết hoa toàn bộ (≥ 2 chữ) ⇒ nội
     /// dung VIẾT HOA; chỉ chữ đầu hoa ⇒ viết hoa chữ đầu nội dung; hoa lộn xộn ("kO") ⇒ nil.
@@ -58,10 +72,12 @@ struct ShortcutTable: Equatable {
         return nil
     }
 
-    /// Từ đang soạn: thử dạng hiển thị rồi phím thô (như macOS). Chỉ khoá thuần chữ.
+    /// Từ đang soạn: thử dạng hiển thị rồi phím thô (như macOS). Khoá thuần chữ, hoặc
+    /// chữ+số (VNI: chữ số nằm trong từ — "ad1" soạn thành "ád", phím thô "ad1").
     func wordExpansion(composed: String, raw: String) -> String? {
-        if let e = expansion(for: composed), Self.isWordKey(composed.lowercased()) { return e }
-        if raw != composed, let e = expansion(for: raw), Self.isWordKey(raw.lowercased()) { return e }
+        func ok(_ k: String) -> Bool { Self.isWordKey(k) || Self.isAlnumKey(k) }
+        if let e = expansion(for: composed), ok(composed) { return e }
+        if raw != composed, let e = expansion(for: raw), ok(raw) { return e }
         return nil
     }
 
@@ -100,6 +116,9 @@ struct ShortcutTable: Equatable {
         guard let c = boundary.first else { return false }
         return c.isWhitespace || c.isNewline
     }
+
+    /// Khoá chữ+số (#109) nở ở cùng ranh giới với khoá chữ (cả dấu câu kết thúc từ).
+    static func triggersAlnum(_ boundary: String) -> Bool { triggersWord(boundary) }
 
     /// Từ `word` nằm cuối `context` có dính liền sau một ký tự không cho nở không (#82 số,
     /// #87 / # @, và chữ/ký hiệu nối kiểu . _ - : \ ~ — URL, email, tên file). Context nil

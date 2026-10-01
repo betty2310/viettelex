@@ -66,7 +66,8 @@ final class ShortcutExpansionTests: XCTestCase {
             var expanded: (String, String)?
             let word = engine.composed
             switch ShortcutMatch.find(in: table, composed: word, raw: engine.rawKeystrokes,
-                                      run: tail.run, allowWord: allow.word, allowToken: allow.token) {
+                                      run: tail.run, allowWord: allow.word, allowToken: allow.token,
+                                      allowAlnum: allow.alnum) {
             case let .word(e)?:
                 replaceSuffix(scalars: word.unicodeScalars.count, with: e)
                 engine.reset()
@@ -148,14 +149,14 @@ final class ShortcutExpansionTests: XCTestCase {
     }
 
     func testTriggers() {
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: " ", glued: false) == (true, true))
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: ",", glued: false) == (true, false))
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: "\n", glued: false) == (true, true))
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: "1", glued: false) == (false, false))
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: "-", glued: false) == (false, false))
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: "", glued: false) == (false, false))   // mũi tên
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: nil, glued: false) == (true, false))   // Esc: cũ
-        XCTAssertTrue(ShortcutMatch.triggers(boundary: " ", glued: true) == (false, true))
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: " ", glued: false) == (true, true, true))
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: ",", glued: false) == (true, false, true))
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: "\n", glued: false) == (true, true, true))
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: "1", glued: false) == (false, false, false))
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: "-", glued: false) == (false, false, false))
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: "", glued: false) == (false, false, false))   // mũi tên
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: nil, glued: false) == (true, false, false))   // Esc: cũ
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: " ", glued: true) == (false, true, true))
     }
 
     func testFindTokenNeedsWholeRun() {
@@ -508,6 +509,145 @@ final class ShortcutExpansionTests: XCTestCase {
         var s = TapField(table: table, axReadable: false)
         s.click(); s.type("a-> ")                 // gõ liền sau chữ: không nở
         XCTAssertEqual(s.text, "a-> ")
+    }
+
+    // MARK: - Issue #109: khoá chữ+số ("ad1", "sdt2", "2fa") nở như khoá chữ
+
+    private let alnum = ShortcutTable([
+        "ad": "add", "ad1": "address", "sdt2": "số điện thoại 2", "2fa": "xác thực hai lớp",
+        "ko": "không", "->": "→", "/shop": "cửa hàng", "123": "một hai ba", "fa": "FA",
+    ])
+
+    /// Giá trị THẬT mỗi đường đưa vào ShortcutMatch khi gõ "ad1" + ranh giới. Telex: chữ
+    /// số là ranh giới ⇒ "ad" đã chốt, cụm (tail.run) = "ad1", từ đang soạn rỗng, cờ
+    /// glued bật (vừa gõ số). VNI: chữ số vào engine ⇒ từ đang soạn "ád", phím thô "ad1".
+    private func findAt(_ b: String?, composed: String, raw: String, run: String, glued: Bool,
+                        _ t: ShortcutTable? = nil) -> ShortcutMatch? {
+        let allow = ShortcutMatch.triggers(boundary: b, glued: glued)
+        return ShortcutMatch.find(in: t ?? alnum, composed: composed, raw: raw, run: run,
+                                  allowWord: allow.word, allowToken: allow.token, allowAlnum: allow.alnum)
+    }
+
+    func testIsAlnumKey() {
+        XCTAssertTrue(ShortcutTable.isAlnumKey("ad1"))
+        XCTAssertTrue(ShortcutTable.isAlnumKey("2fa"))
+        XCTAssertTrue(ShortcutTable.isAlnumKey("SĐT2"))
+        XCTAssertFalse(ShortcutTable.isAlnumKey("ad"))        // khoá chữ
+        XCTAssertFalse(ShortcutTable.isAlnumKey("123"))       // thuần số: vẫn là khoá ký hiệu/số
+        XCTAssertFalse(ShortcutTable.isAlnumKey("->"))
+        XCTAssertFalse(ShortcutTable.isAlnumKey("a1-"))
+        XCTAssertFalse(ShortcutTable.isAlnumKey(""))
+    }
+
+    func testTriggersAlnum() {
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: " ", glued: true).alnum)
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: "\n", glued: true).alnum)
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: "\t", glued: false).alnum)
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: ".", glued: true).alnum)
+        XCTAssertTrue(ShortcutMatch.triggers(boundary: ",", glued: false).alnum)
+        XCTAssertFalse(ShortcutMatch.triggers(boundary: "1", glued: false).alnum)   // "ad12" chưa xong
+        XCTAssertFalse(ShortcutMatch.triggers(boundary: "-", glued: false).alnum)
+        XCTAssertFalse(ShortcutMatch.triggers(boundary: "", glued: false).alnum)    // mũi tên
+        XCTAssertFalse(ShortcutMatch.triggers(boundary: nil, glued: false).alnum)   // Esc
+    }
+
+    /// Telex, IMK in-place + tap đã neo: "ad1" nở ở cả dấu câu (như khoá chữ "ad").
+    func testAlnumTelexValuesBothPaths() {
+        let tok = ShortcutMatch.token(token: "ad1", expansion: "address")
+        XCTAssertEqual(findAt(" ", composed: "", raw: "", run: "ad1", glued: true), tok)
+        XCTAssertEqual(findAt("\n", composed: "", raw: "", run: "ad1", glued: true), tok)
+        XCTAssertEqual(findAt(".", composed: "", raw: "", run: "ad1", glued: true), tok)
+        XCTAssertEqual(findAt(",", composed: "", raw: "", run: "ad1", glued: true), tok)
+        XCTAssertEqual(findAt("?", composed: "", raw: "", run: "Ad1", glued: true),
+                       .token(token: "Ad1", expansion: "Address"))
+        XCTAssertEqual(findAt(".", composed: "", raw: "", run: "sdt2", glued: true),
+                       .token(token: "sdt2", expansion: "số điện thoại 2"))
+        // Số đứng đầu: "2" đã chốt + từ đang soạn "fa" (khoá chữ "fa" bị chặn vì dính số).
+        XCTAssertEqual(findAt(" ", composed: "fa", raw: "fa", run: "2", glued: true),
+                       .token(token: "2fa", expansion: "xác thực hai lớp"))
+        XCTAssertEqual(findAt(",", composed: "fa", raw: "fa", run: "2", glued: true),
+                       .token(token: "2fa", expansion: "xác thực hai lớp"))
+        // Chưa xong khoá / dính chữ / không phải ranh giới.
+        XCTAssertNil(findAt("1", composed: "ad", raw: "ad", run: "", glued: false))
+        XCTAssertNil(findAt("2", composed: "", raw: "", run: "ad1", glued: true))
+        XCTAssertNil(findAt(" ", composed: "", raw: "", run: "xad1", glued: true))
+        XCTAssertNil(findAt(" ", composed: "", raw: "", run: "x.ad1", glued: true))
+        XCTAssertNil(findAt("-", composed: "", raw: "", run: "ad1", glued: true))
+    }
+
+    /// Không đổi: #82 (số dính trước khoá chữ), khoá ký hiệu / thuần số chỉ nở ở khoảng trắng.
+    func testAlnumKeepsOldRules() {
+        XCTAssertNil(findAt(" ", composed: "ko", raw: "ko", run: "12", glued: true))       // #82
+        XCTAssertNil(findAt(".", composed: "ko", raw: "ko", run: "12", glued: true))
+        XCTAssertNil(findAt(" ", composed: "ad", raw: "ad", run: "5", glued: true))
+        XCTAssertNil(findAt(",", composed: "", raw: "", run: "->", glued: false))
+        XCTAssertNil(findAt(".", composed: "shop", raw: "shop", run: "/", glued: true))
+        XCTAssertNil(findAt(",", composed: "", raw: "", run: "123", glued: true))
+        XCTAssertEqual(findAt(" ", composed: "", raw: "", run: "123", glued: true),
+                       .token(token: "123", expansion: "một hai ba"))
+        XCTAssertEqual(findAt(" ", composed: "", raw: "", run: "->", glued: false),
+                       .token(token: "->", expansion: "→"))
+        XCTAssertEqual(findAt(".", composed: "ad", raw: "ad", run: "", glued: false), .word(expansion: "add"))
+    }
+
+    /// VNI: chữ số là phím dấu ⇒ "ad1" soạn thành "ád", khớp khoá qua phím THÔ (như cũ),
+    /// đường từ đang soạn — chạy được cả marked lẫn in-place.
+    func testAlnumVNIMatchesRawKeys() throws {
+        var e = TelexEngine()
+        e.vniMode = true
+        for ch in "ad1" { _ = e.feed(ch) }
+        XCTAssertEqual(e.rawKeystrokes, "ad1")
+        XCTAssertNotEqual(e.composed, "ad1")
+        for b in [" ", ".", ",", "\n"] {
+            XCTAssertEqual(findAt(b, composed: e.composed, raw: e.rawKeystrokes, run: "", glued: false),
+                           .word(expansion: "address"), "boundary \(b)")
+        }
+        XCTAssertNil(findAt(" ", composed: e.composed, raw: e.rawKeystrokes, run: "", glued: true))  // #82
+    }
+
+    /// Tap, cụm CHƯA neo (vừa đổi app/ô — tail.reset, không phải click) và AX không đọc
+    /// được: khoá chữ+số nở như khoá chữ ("ad" vẫn nở ở đó); AX thấy dính chữ ⇒ không.
+    /// Khoá ký hiệu giữ luật #99.
+    func testTapUnanchoredAlnumExpandsLikeWordKey() {
+        func find(_ t: ShortcutTail, _ b: String, composed: String = "", glued: Bool = true,
+                  _ v: ShortcutScreen.TokenVerdict) -> ShortcutMatch? {
+            let allow = ShortcutMatch.triggers(boundary: b, glued: glued)
+            return ShortcutMatch.findForTap(in: alnum, composed: composed, raw: composed, tail: t,
+                                            allowWord: allow.word, allowToken: allow.token,
+                                            allowAlnum: allow.alnum, screen: { _ in v })
+        }
+        var t = ShortcutTail()
+        t.reset(); t.append("ad"); t.append("1")
+        XCTAssertFalse(t.anchored); XCTAssertFalse(t.afterJump)
+        let tok = ShortcutMatch.token(token: "ad1", expansion: "address")
+        XCTAssertEqual(find(t, " ", .unreadable), tok)
+        XCTAssertEqual(find(t, ".", .unreadable), tok)
+        XCTAssertEqual(find(t, " ", .standsAlone), tok)
+        XCTAssertNil(find(t, " ", .glued))
+        XCTAssertEqual(find(ShortcutTail(), " ", composed: "ad", glued: false, .glued), .word(expansion: "add"))
+        var s = ShortcutTail(); s.append("->")
+        XCTAssertNil(find(s, " ", glued: false, .unreadable))                // #99 giữ nguyên
+        var two = ShortcutTail(); two.append("2")
+        XCTAssertEqual(find(two, " ", composed: "fa", .unreadable),
+                       .token(token: "2fa", expansion: "xác thực hai lớp"))
+    }
+
+    /// Luồng mô hình in-place (IMK đã verify / tap đã neo), Telex.
+    func testAlnumFlowTelex() {
+        XCTAssertEqual(typed("ad1 ", alnum), "address ")
+        XCTAssertEqual(typed("ad1.", alnum), "address.")
+        XCTAssertEqual(typed("xem ad1, ", alnum), "xem address, ")
+        XCTAssertEqual(typed("AD1 ", alnum), "ADDRESS ")
+        XCTAssertEqual(typed("sdt2!", alnum), "số điện thoại 2!")
+        XCTAssertEqual(typed("2fa ", alnum), "xác thực hai lớp ")
+        XCTAssertEqual(typed("ad12 ", alnum), "ad12 ")
+        XCTAssertEqual(typed("xad1 ", alnum), "xad1 ")
+        XCTAssertEqual(typed("ad1-x ", alnum), "ad1-x ")
+        XCTAssertEqual(typed("12ko ", alnum), "12ko ")                          // #82
+        XCTAssertEqual(typed("->, ", alnum), "->, ")
+        var s = Screen(alnum)
+        s.type("ad1.⌫")
+        XCTAssertEqual(s.text, "ad1.")                                          // ⌫ hoàn tác một lần
     }
 
     // MARK: - File (khứ hồi với iOS/Android)

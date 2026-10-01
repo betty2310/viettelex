@@ -9,6 +9,9 @@
 //    không nở. macOS không có contextBeforeInput như iOS, nên cụm này lấy từ
 //    ShortcutTail (ký tự chính mình thấy gõ), rồi IMKit ĐỌC LẠI màn hình để xác nhận
 //    trước khi thay (ShortcutScreen) — chỉ đọc khi cụm khớp một khoá, không mỗi phím.
+//  • khoá CHỮ+SỐ ("ad1", "sdt2", "2fa" — #109): đi đường cụm như khoá ký hiệu (Telex:
+//    chữ số là ranh giới) nhưng nở ở cùng ranh giới với khoá chữ (cả dấu câu); VNI:
+//    khớp qua phím thô của từ đang soạn ("ad1" soạn thành "ád").
 //  • giữ hoa theo cách gõ: ko → không, Ko → Không, KO → KHÔNG; hoa lộn xộn không
 //    nở; khoá ghi đúng y hệt được ưu tiên.
 //  • ⌫ ngay sau khi nở trả lại đúng chữ đã gõ + ranh giới, một lần, chỉ khi màn hình
@@ -36,6 +39,21 @@ struct ShortcutTable: Equatable {
 
     /// Khoá thuần chữ — tra theo từ engine đang soạn.
     static func isWordKey(_ k: String) -> Bool { !k.isEmpty && k.allSatisfy { $0.isLetter } }
+
+    /// Khoá CHỮ+SỐ ("ad1", "sdt2", "2fa" — issue #109): chỉ chữ và chữ số, có cả hai.
+    /// Telex coi chữ số là ranh giới nên khoá này đi đường cụm (`tokenExpansion`) như
+    /// khoá ký hiệu, nhưng NỞ như khoá chữ: cả ở dấu câu kết thúc từ (`triggers.alnum`)
+    /// và cả khi cụm chưa neo mà màn hình không đọc được (`findForTap`). Thuần số
+    /// ("123") vẫn là khoá ký hiệu/số (chỉ khoảng trắng — số thập phân, chip số).
+    /// VNI: chữ số là phím dấu, khoá này khớp qua PHÍM THÔ của từ đang soạn
+    /// (`wordExpansion`: "ad1" → "ád" vẫn khớp "ad1").
+    static func isAlnumKey(_ k: String) -> Bool {
+        var letter = false, digit = false
+        for c in k {
+            if c.isLetter { letter = true } else if c.isNumber { digit = true } else { return false }
+        }
+        return letter && digit
+    }
 
     /// Nội dung sẽ nở cho `typed` (đã áp hoa/thường), nil = không khớp.
     /// 1. khớp nguyên văn; 2. khoá viết thường + `typed` viết hoa toàn bộ (≥ 2 chữ) ⇒
@@ -121,16 +139,19 @@ enum ShortcutMatch: Equatable {
 
     /// Tra ở ranh giới: khoá CHỮ theo từ đang soạn trước, rồi khoá KÝ HIỆU/SỐ theo cả
     /// cụm `run + composed` (run = phần đã chốt liền trước từ, xem ShortcutTail).
+    /// `allowAlnum`: ranh giới cho khoá chữ+số (#109) — cụm khớp mà là chữ+số thì nở
+    /// cả khi `allowToken` tắt (dấu câu).
     static func find(in table: ShortcutTable, composed: String, raw: String, run: String,
-                     allowWord: Bool, allowToken: Bool) -> ShortcutMatch? {
+                     allowWord: Bool, allowToken: Bool, allowAlnum: Bool = false) -> ShortcutMatch? {
         guard !table.isEmpty else { return nil }
         if allowWord, !composed.isEmpty,
            let e = table.wordExpansion(composed: composed, raw: raw) {
             return .word(expansion: e)
         }
-        if allowToken, table.hasTokenKeys {
+        if allowToken || allowAlnum, table.hasTokenKeys {
             let cand = run + composed
-            if !cand.isEmpty, let m = table.tokenExpansion(context: cand), m.token == cand {
+            if !cand.isEmpty, let m = table.tokenExpansion(context: cand), m.token == cand,
+               allowToken || ShortcutTable.isAlnumKey(cand) {
                 return .token(token: cand, expansion: m.expansion)
             }
         }
@@ -144,26 +165,32 @@ enum ShortcutMatch: Equatable {
     /// cụm bắt đầu ngay sau một lần dời con trỏ (`tail.afterJump`: click, phím điều
     /// hướng, ⌘/⌃-tổ hợp, Tab) — coi chỗ dời tới là neo. Đánh đổi (Phil duyệt): click
     /// ngay sau chữ rồi gõ "->" ("a|->") nở thành "a→"; ⌫ ngay sau vẫn hoàn tác. Khoá
-    /// chữ không đổi. `screen` chỉ được gọi khi cụm ĐÃ khớp một khoá.
+    /// chữ không đổi. `screen` chỉ được gọi khi cụm ĐÃ khớp một khoá. Khoá chữ+số (#109)
+    /// nở như khoá chữ: AX không đọc được vẫn nở (khoá chữ "ad" cũng không cần neo);
+    /// AX thấy dính chữ trước ("x|ad1") thì không.
     static func findForTap(in table: ShortcutTable, composed: String, raw: String, tail: ShortcutTail,
-                           allowWord: Bool, allowToken: Bool,
+                           allowWord: Bool, allowToken: Bool, allowAlnum: Bool = false,
                            screen: (String) -> ShortcutScreen.TokenVerdict) -> ShortcutMatch? {
         let m = find(in: table, composed: composed, raw: raw, run: tail.run,
-                     allowWord: allowWord, allowToken: allowToken)
+                     allowWord: allowWord, allowToken: allowToken, allowAlnum: allowAlnum)
         guard case let .token(token, _)? = m, !tail.anchored else { return m }
         switch screen(token) {
         case .standsAlone: return m
         case .glued: return nil
-        case .unreadable: return tail.afterJump ? m : nil
+        case .unreadable: return tail.afterJump || ShortcutTable.isAlnumKey(token) ? m : nil
         }
     }
 
     /// Ranh giới `boundary` (nil = Esc / phím không chèn ký tự) + từ có dính sau ký tự
     /// mở token (#82 số, #87 / # @ . _ -) ⇒ được tra khoá chữ / khoá ký hiệu không.
-    /// Esc giữ hành vi cũ: khoá chữ có, khoá ký hiệu không.
-    static func triggers(boundary: String?, glued: Bool) -> (word: Bool, token: Bool) {
-        guard let b = boundary else { return (!glued, false) }
-        return (!glued && ShortcutTable.triggersWord(b), ShortcutTable.triggersToken(b))
+    /// Esc giữ hành vi cũ: khoá chữ có, khoá ký hiệu không. `alnum` = khoá chữ+số
+    /// (#109): cùng bộ ranh giới với khoá chữ (khoảng trắng, xuống dòng, Tab, dấu câu kết
+    /// thúc từ) nhưng KHÔNG bị chặn bởi `glued` — cụm khớp nguyên văn từ đầu cụm nên
+    /// "5ad1" / "x.ad1" tự không khớp; "ad1" có chữ số nên luôn "dính số" ở Telex.
+    static func triggers(boundary: String?, glued: Bool) -> (word: Bool, token: Bool, alnum: Bool) {
+        guard let b = boundary else { return (!glued, false, false) }
+        return (!glued && ShortcutTable.triggersWord(b), ShortcutTable.triggersToken(b),
+                ShortcutTable.triggersWord(b))
     }
 }
 

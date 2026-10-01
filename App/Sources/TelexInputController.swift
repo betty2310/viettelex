@@ -743,7 +743,7 @@ final class TelexInputController: IMKInputController {
             let trigger: String? = newlineKey ? "\n" : (event.keyCode == kTab ? "\t" : nil)
             let allow = ShortcutMatch.triggers(boundary: trigger, glued: wordGluedToDigit)
             let rewrote = boundary(client, allowShortcuts: allow.word, allowTokenShortcuts: allow.token,
-                                   commitSuffix: handling.commitSuffix)
+                                   allowAlnumShortcuts: allow.alnum, commitSuffix: handling.commitSuffix)
             boundaryCommitInFlight = false
             wordGluedToDigit = false
             // Enter: dòng mới — cụm bắt đầu lại sau xuống dòng. Tab/Esc: có thể dời
@@ -835,7 +835,8 @@ final class TelexInputController: IMKInputController {
             let inserted = ShortcutScreen.insertedText(boundaryText)
             let allow = ShortcutMatch.triggers(boundary: inserted ?? "", glued: wordGluedToDigit)
             let rewrote = boundary(client, suppressAutoRestore: boundaryChar.map(isBracket) ?? false,
-                                   allowShortcuts: allow.word, allowTokenShortcuts: allow.token)
+                                   allowShortcuts: allow.word, allowTokenShortcuts: allow.token,
+                                   allowAlnumShortcuts: allow.alnum)
             wordGluedToDigit = Self.gluesShortcutToken(boundaryChar)   // #82 số, #87 / # @ . _ -
             // Chip số (chỉ dạng tiền): dấu cách ngay sau cụm có chữ số ⇒ đọc màn hình MỘT lần
             // sau khi dấu cách tới app. Chỉ app đã chứng minh in-place (thay chữ đã chốt bằng
@@ -1766,6 +1767,7 @@ final class TelexInputController: IMKInputController {
 
     private func boundary(_ client: IMKTextInput, suppressAutoRestore: Bool = false,
                           allowShortcuts: Bool = true, allowTokenShortcuts: Bool = false,
+                          allowAlnumShortcuts: Bool = false,
                           commitSuffix: String = "") -> Bool {
         let wasEdge = edgeTapWord
         expandedAtBoundary = nil
@@ -1773,12 +1775,15 @@ final class TelexInputController: IMKInputController {
         defer { tracking = false; onLen = 0; edgeTapWord = false }
         let id = AppState.shared.currentBundleID
         let marked = usesMarkedNow(id)
-        let table = (allowShortcuts || allowTokenShortcuts) ? AppState.shared.shortcutTable : ShortcutTable()
+        // Khoá ký hiệu/số (khoảng trắng/Enter) hoặc khoá chữ+số (#109: cả dấu câu).
+        let anyToken = allowTokenShortcuts || allowAlnumShortcuts
+        let table = (allowShortcuts || anyToken) ? AppState.shared.shortcutTable : ShortcutTable()
         guard !engine.isEmpty else {
             engine.reset()
-            // Khoá ký hiệu/số trên chữ ĐÃ chốt ("->", "√√", "k2"): không có từ đang soạn.
-            if allowTokenShortcuts, !marked, table.hasTokenKeys,
-               tryTokenShortcut(table: table, composed: "", client, id: id) {
+            // Khoá ký hiệu/số trên chữ ĐÃ chốt ("->", "√√", "k2", "ad1"): không có từ đang soạn.
+            if anyToken, !marked, table.hasTokenKeys,
+               tryTokenShortcut(table: table, composed: "", allowToken: allowTokenShortcuts,
+                                allowAlnum: allowAlnumShortcuts, client, id: id) {
                 return true
             }
             return false
@@ -1807,8 +1812,9 @@ final class TelexInputController: IMKInputController {
         }
         // Khoá ký hiệu/số kết thúc bằng từ đang soạn (":D", "1tr" = "1" đã chốt + "tr"):
         // chỉ in-place (chữ đang soạn đã thật trên màn hình), không edge.
-        if allowTokenShortcuts, !marked, !wasEdge, table.hasTokenKeys,
-           tryTokenShortcut(table: table, composed: word, client, id: id) {
+        if anyToken, !marked, !wasEdge, table.hasTokenKeys,
+           tryTokenShortcut(table: table, composed: word, allowToken: allowTokenShortcuts,
+                            allowAlnum: allowAlnumShortcuts, client, id: id) {
             return true
         }
 
@@ -1840,10 +1846,11 @@ final class TelexInputController: IMKInputController {
     /// cụm mình dựng sai đều không đụng. Chỉ in-place: app marked không bảo đảm tôn
     /// trọng replacementRange trên chữ đã chốt. Trả true = đã thay (engine đã reset).
     private func tryTokenShortcut(table: ShortcutTable, composed: String,
+                                  allowToken: Bool, allowAlnum: Bool,
                                   _ client: IMKTextInput, id: String?) -> Bool {
         guard case let .token(token, expansion)? = ShortcutMatch.find(
             in: table, composed: composed, raw: composed, run: shortcutTail.run,
-            allowWord: false, allowToken: true) else { return false }
+            allowWord: false, allowToken: allowToken, allowAlnum: allowAlnum) else { return false }
         guard Self.replacesCommittedText(id) else {
             DebugLog.log("shortcut token \(id ?? "?"): app not proven in-place → skip")
             return false

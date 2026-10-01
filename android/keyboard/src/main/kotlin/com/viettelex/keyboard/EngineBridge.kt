@@ -369,13 +369,18 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
             val e = table.wordExpansion(composed, typedRaw)
             if (e != null) {
                 val ctx = proxy.contextBeforeInput()
-                if (ShortcutTable.isGlued(composed, ctx) || !proxy.confirmTail(composed)) return null
-                return applyExpansion(composed, e, text, proxy, put)
+                val glued = ShortcutTable.isGlued(composed, ctx)
+                if (!glued && proxy.confirmTail(composed)) return applyExpansion(composed, e, text, proxy, put)
+                // Dính trước ("2fa": "fa" sau số) — cả cụm có thể là khoá chữ+số (#109).
+                if (!glued) return null
             }
         }
-        if (table.hasTokenKeys && ShortcutTable.triggersToken(text) && !proxy.hasSelection) {
+        // Khoá ký hiệu/số: khoảng trắng/Enter. Khoá chữ+số (#109): cả dấu câu, như khoá chữ.
+        val tokenTrigger = ShortcutTable.triggersToken(text)
+        if (table.hasTokenKeys && (tokenTrigger || ShortcutTable.triggersAlnum(text)) && !proxy.hasSelection) {
             val ctx = proxy.contextBeforeInput() ?: return null
             val (token, e) = table.tokenExpansion(ctx) ?: return null
+            if (!tokenTrigger && !ShortcutTable.isAlnumKey(token)) return null
             if (!typedEmpty && !token.endsWith(typedWord)) return null
             return applyExpansion(token, e, text, proxy, put)
         }

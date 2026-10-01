@@ -10,6 +10,8 @@ package com.viettelex.keyboard
  *    tự khôi phục tiếng Anh.
  *  • khoá có KÝ HIỆU/SỐ ("->", "√√", "k2"): tra lúc gõ khoảng trắng/Enter, so với cả cụm
  *    liền nhau ngay trước con trỏ.
+ *  • khoá CHỮ+SỐ ("ad1", "2fa" — #109): như khoá ký hiệu/số nhưng nở cả ở dấu câu (như khoá
+ *    chữ); VNI khớp qua phím thô ("ad1" soạn thành "ád").
  * Không nở khi từ dính liền sau chữ số (#82: "5h", "5h30") hoặc sau / # @ (#87).
  * Giữ hoa: ko → không, Ko → Không, KO → KHÔNG (khoá viết thường).
  */
@@ -32,10 +34,14 @@ class ShortcutTable(entries: Map<String, String> = emptyMap()) {
         return applyCase(typed, e)
     }
 
-    /** Từ đang soạn: thử dạng hiển thị rồi phím thô. Chỉ khoá thuần chữ. */
+    /**
+     * Từ đang soạn: thử dạng hiển thị rồi phím thô. Khoá thuần chữ, hoặc chữ+số (VNI: chữ số
+     * nằm trong từ — "ad1" soạn thành "ád", phím thô "ad1").
+     */
     fun wordExpansion(composed: String, raw: String): String? {
-        if (isWordKey(composed)) expansion(composed)?.let { return it }
-        if (raw != composed && isWordKey(raw)) expansion(raw)?.let { return it }
+        fun ok(k: String) = isWordKey(k) || isAlnumKey(k)
+        if (ok(composed)) expansion(composed)?.let { return it }
+        if (raw != composed && ok(raw)) expansion(raw)?.let { return it }
         return null
     }
 
@@ -55,6 +61,27 @@ class ShortcutTable(entries: Map<String, String> = emptyMap()) {
 
         /** Khoá thuần chữ — tra theo từ engine đang soạn. */
         fun isWordKey(k: String): Boolean = k.isNotEmpty() && k.codePoints().allMatch { Character.isLetter(it) }
+
+        /**
+         * Khoá CHỮ+SỐ ("ad1", "sdt2", "2fa" — issue #109): chỉ chữ và chữ số, có cả hai. Đi
+         * đường cụm ([tokenExpansion]) nhưng nở ở cùng ranh giới với khoá chữ ([triggersAlnum]);
+         * VNI khớp qua phím thô ([wordExpansion]). Thuần số ("123") vẫn là khoá ký hiệu/số.
+         */
+        fun isAlnumKey(k: String): Boolean {
+            var letter = false
+            var digit = false
+            for (cp in k.codePoints()) {
+                when {
+                    Character.isLetter(cp) -> letter = true
+                    Character.isDigit(cp) -> digit = true
+                    else -> return false
+                }
+            }
+            return letter && digit
+        }
+
+        /** Khoá chữ+số (#109) nở ở cùng ranh giới với khoá chữ (cả dấu câu kết thúc từ). */
+        fun triggersAlnum(boundary: String): Boolean = triggersWord(boundary)
 
         fun applyCase(typed: String, e: String): String? {
             val letters = typed.filter { it.isLetter() }

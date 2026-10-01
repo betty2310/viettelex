@@ -112,6 +112,64 @@ class ShortcutsTests {
         assertEquals("->,", typed("->,"))
     }
 
+    // MARK: issue #109 — khoá chữ+số ("ad1", "sdt2", "2fa") nở như khoá chữ
+
+    private val alnum = ShortcutTable(mapOf(
+        "ad" to "add", "ad1" to "address", "sdt2" to "số điện thoại 2", "2fa" to "xác thực hai lớp",
+        "fa" to "FA", "ko" to "không", "->" to "→", "123" to "một hai ba",
+    ))
+
+    /** VNI: phím số là phím dấu (controller gọi vniDigit trước, false ⇒ ranh giới). */
+    private fun typedVNI(keys: String): String {
+        val b = EngineBridge(KeyboardSettings(shortcuts = alnum, shortcutsEnabled = true, vniMode = true))
+        val p = MockProxy()
+        for (ch in keys) {
+            if (ch.isDigit() && b.vniDigit(ch, p)) continue
+            if (ch.isLetter()) b.letter(ch, p) else b.boundary(ch.toString(), p)
+        }
+        return p.text
+    }
+
+    @Test fun alnumKeyPure() {
+        assertTrue(ShortcutTable.isAlnumKey("ad1"))
+        assertTrue(ShortcutTable.isAlnumKey("2fa"))
+        assertFalse(ShortcutTable.isAlnumKey("ad"))
+        assertFalse(ShortcutTable.isAlnumKey("123"))
+        assertFalse(ShortcutTable.isAlnumKey("a1-"))
+        assertTrue(ShortcutTable.triggersAlnum("."))
+        assertTrue(ShortcutTable.triggersAlnum(" "))
+        assertFalse(ShortcutTable.triggersAlnum("1"))
+        assertFalse(ShortcutTable.triggersAlnum("-"))
+        assertEquals("address", alnum.wordExpansion("ád", "ad1"))       // VNI: phím thô
+        assertEquals("số điện thoại 2", alnum.wordExpansion("sdt2", "sdt2"))
+        assertNull(alnum.wordExpansion("", "->"))
+    }
+
+    @Test fun alnumTelexFlow() {
+        val s = settings(alnum)
+        assertEquals("address ", typed("ad1 ", s))
+        assertEquals("address.", typed("ad1.", s))
+        assertEquals("xem address, ", typed("xem ad1, ", s))
+        assertEquals("số điện thoại 2!", typed("sdt2!", s))
+        assertEquals("xác thực hai lớp ", typed("2fa ", s))     // "fa" dính số nhưng cả cụm là khoá
+        assertEquals("xác thực hai lớp.", typed("2fa.", s))
+        assertEquals("ad12 ", typed("ad12 ", s))
+        assertEquals("xad1 ", typed("xad1 ", s))
+        assertEquals("12ko ", typed("12ko ", s))                 // #82
+        assertEquals("5fa ", typed("5fa ", s))
+        assertEquals("->, ", typed("->, ", s))                   // ký hiệu: chỉ space/Enter
+        assertEquals("123, ", typed("123, ", s))
+        assertEquals("một hai ba ", typed("123 ", s))
+        assertEquals("add ", typed("ad ", s))
+    }
+
+    @Test fun alnumVNIFlow() {
+        assertEquals("address ", typedVNI("ad1 "))
+        assertEquals("address.", typedVNI("ad1."))
+        assertEquals("Address ", typedVNI("Ad1 "))
+        assertEquals("add ", typedVNI("ad "))
+    }
+
     @Test fun backspaceRestoresTypedOnce() {
         val p = MockProxy(); val b = EngineBridge(settings())
         type("ko ", b, p)

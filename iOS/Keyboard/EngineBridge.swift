@@ -646,15 +646,19 @@ final class EngineBridge {
            let e = table.wordExpansion(composed: typedWord, raw: typedRaw) {
             let composed = typedWord
             let ctx = proxy.contextBeforeInput
-            if !ShortcutTable.isGlued(word: composed, context: ctx),
-               CompositionSync.canDelete(composed.count, expected: composed, context: { ctx }) {
+            let glued = ShortcutTable.isGlued(word: composed, context: ctx)
+            if !glued, CompositionSync.canDelete(composed.count, expected: composed, context: { ctx }) {
                 return applyExpansion(typed: composed, expansion: e, boundary: text, proxy: proxy)
             }
-            return nil
+            // Dính trước ("2fa": "fa" sau số) — cả cụm có thể là khoá chữ+số (#109).
+            if !glued { return nil }
         }
-        if table.hasTokenKeys, ShortcutTable.triggersToken(text),
+        // Khoá ký hiệu/số: khoảng trắng/Enter. Khoá chữ+số (#109): cả dấu câu, như khoá chữ.
+        let tokenTrigger = ShortcutTable.triggersToken(text)
+        if table.hasTokenKeys, tokenTrigger || ShortcutTable.triggersAlnum(text),
            let ctx = proxy.contextBeforeInput, !proxy.hasSelection,
            let m = table.tokenExpansion(context: ctx),
+           tokenTrigger || ShortcutTable.isAlnumKey(m.token),
            typedEmpty || m.token.hasSuffix(typedWord) {
             return applyExpansion(typed: m.token, expansion: m.expansion, boundary: text, proxy: proxy)
         }

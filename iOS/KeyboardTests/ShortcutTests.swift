@@ -126,6 +126,65 @@ final class ShortcutTests: XCTestCase {
         XCTAssertEqual(typed("->,"), "->,")                      // khoá ký hiệu chỉ nở ở space/Enter
     }
 
+    // MARK: issue #109 — khoá chữ+số ("ad1", "sdt2", "2fa") nở như khoá chữ
+
+    private let alnum = ShortcutTable([
+        "ad": "add", "ad1": "address", "sdt2": "số điện thoại 2", "2fa": "xác thực hai lớp",
+        "fa": "FA", "ko": "không", "->": "→", "123": "một hai ba",
+    ])
+
+    /// VNI: phím số là phím dấu (controller gọi vniDigit trước, false ⇒ ranh giới).
+    private func typedVNI(_ keys: String) -> String {
+        var s = settings(alnum); s.vniMode = true
+        let b = EngineBridge(settings: s), p = MockProxy()
+        for ch in keys {
+            if ch.isNumber, b.vniDigit(ch, proxy: p) { continue }
+            if ch.isLetter { b.letter(ch, proxy: p) } else { b.boundary(String(ch), proxy: p) }
+        }
+        return p.text
+    }
+
+    func testAlnumKeyPure() {
+        XCTAssertTrue(ShortcutTable.isAlnumKey("ad1"))
+        XCTAssertTrue(ShortcutTable.isAlnumKey("2fa"))
+        XCTAssertFalse(ShortcutTable.isAlnumKey("ad"))
+        XCTAssertFalse(ShortcutTable.isAlnumKey("123"))
+        XCTAssertFalse(ShortcutTable.isAlnumKey("a1-"))
+        XCTAssertTrue(ShortcutTable.triggersAlnum("."))
+        XCTAssertTrue(ShortcutTable.triggersAlnum(" "))
+        XCTAssertFalse(ShortcutTable.triggersAlnum("1"))
+        XCTAssertFalse(ShortcutTable.triggersAlnum("-"))
+        // VNI: "ad1" soạn thành "ád" — khớp qua phím thô.
+        XCTAssertEqual(alnum.wordExpansion(composed: "ád", raw: "ad1"), "address")
+        XCTAssertEqual(alnum.wordExpansion(composed: "sdt2", raw: "sdt2"), "số điện thoại 2")
+        XCTAssertNil(alnum.wordExpansion(composed: "", raw: "->"))
+    }
+
+    func testAlnumTelexFlow() {
+        let s = settings(alnum)
+        XCTAssertEqual(typed("ad1 ", s), "address ")
+        XCTAssertEqual(typed("ad1.", s), "address.")
+        XCTAssertEqual(typed("xem ad1, ", s), "xem address, ")
+        XCTAssertEqual(typed("sdt2!", s), "số điện thoại 2!")
+        XCTAssertEqual(typed("2fa ", s), "xác thực hai lớp ")   // "fa" dính số nhưng cả cụm là khoá
+        XCTAssertEqual(typed("2fa.", s), "xác thực hai lớp.")
+        XCTAssertEqual(typed("ad12 ", s), "ad12 ")
+        XCTAssertEqual(typed("xad1 ", s), "xad1 ")
+        XCTAssertEqual(typed("12ko ", s), "12ko ")               // #82
+        XCTAssertEqual(typed("5fa ", s), "5fa ")
+        XCTAssertEqual(typed("->, ", s), "->, ")                 // ký hiệu: chỉ space/Enter
+        XCTAssertEqual(typed("123, ", s), "123, ")               // thuần số: như cũ
+        XCTAssertEqual(typed("123 ", s), "một hai ba ")
+        XCTAssertEqual(typed("ad ", s), "add ")
+    }
+
+    func testAlnumVNIFlow() {
+        XCTAssertEqual(typedVNI("ad1 "), "address ")
+        XCTAssertEqual(typedVNI("ad1."), "address.")
+        XCTAssertEqual(typedVNI("Ad1 "), "Address ")
+        XCTAssertEqual(typedVNI("ad "), "add ")
+    }
+
     func testBackspaceRestoresTypedOnce() {
         let p = MockProxy(), b = EngineBridge(settings: settings())
         type("ko ", bridge: b, proxy: p)
