@@ -11,7 +11,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-SIGN_ID="Developer ID Application: Phil Trinh (84T567KMYD)"
+SIGN_ID="Developer ID Application: SENPRINTS LLC (84T567KMYD)"
 PROFILE="VietTelexNotary"
 DEST="$HOME/Library/Input Methods/VietTelex.app"
 SCRATCH="${TMPDIR:-/tmp}/viettelex-notarize"

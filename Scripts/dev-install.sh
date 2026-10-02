@@ -12,7 +12,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-SIGN_ID="Developer ID Application: Phil Trinh (84T567KMYD)"
+SIGN_ID="Developer ID Application: SENPRINTS LLC (84T567KMYD)"
 DEST="$HOME/Library/Input Methods/VietTelex.app"
 
 # FIXED derived path — the default DerivedData grows one dir per xcodegen
