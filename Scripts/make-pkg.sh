@@ -17,7 +17,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-APP_SIGN_ID="Developer ID Application: SENPRINTS LLC (84T567KMYD)"
+APP_SIGN_ID="Developer ID Application: Phil Trinh (84T567KMYD)"
 INSTALLER_SIGN_ID="Developer ID Installer: SENPRINTS LLC (84T567KMYD)"
 PROFILE="VietTelexNotary"
 PKGID="com.viettelex.inputmethod.telex.pkg"

@@ -11,7 +11,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-SIGN_ID="Developer ID Application: SENPRINTS LLC (84T567KMYD)"
+SIGN_ID="Developer ID Application: Phil Trinh (84T567KMYD)"
 PROFILE="VietTelexNotary"
 DEST="$HOME/Library/Input Methods/VietTelex.app"
 SCRATCH="${TMPDIR:-/tmp}/viettelex-notarize"
@@ -66,6 +66,7 @@ source Scripts/icloud-profile.sh      # → $ENTITLEMENTS (+ embedded.provisionp
 codesign --force --options runtime --timestamp \
          --entitlements "$ENTITLEMENTS" \
          --sign "$SIGN_ID" "$APP"
+Scripts/verify-launchable.sh "$APP"   # chứng chỉ ký ∈ profile, entitlement ⊆ profile (lỗi 1.8.7)
 if [ -f "$APP/Contents/CodeResources" ]; then
   echo "  WARNING: stray Contents/CodeResources reappeared after signing"; fi
 
