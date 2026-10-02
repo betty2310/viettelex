@@ -114,6 +114,10 @@ com.apple.campo: inPlace
 # #57, 22/08/2026: chỉ lộ khi app dưới overlay là in-place — trên terminal/browser
 # thì routing theo frontmost đã đưa sang tap nên không ai để ý).
 com.runningwithcrayons.Alfred: inPlace
+# Raycast là panel KHÔNG activate: frontmost vẫn là app phía sau. Issue #110
+# (02/10/2026, Raycast 2.6 trên Edge): routing từng gộp rule của app phía sau →
+# tap ⌫+gõ-lại vào ô Raycast, Raycast áp ⌫ sau chữ chèn ("wngs" → "ưnứ"). Nay
+# Raycast luôn theo rule của chính nó (AppState.overlayLauncherBundleIDs).
 com.raycast.macos: inPlace
 at.obdev.LaunchBar: inPlace
 com.microsoft.Word: inPlace

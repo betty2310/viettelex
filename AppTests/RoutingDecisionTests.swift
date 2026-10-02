@@ -403,6 +403,82 @@ final class SpotlightClientIDNeverMergesWithFrontTests: XCTestCase {
     }
 }
 
+// Issue #110 (02/10/2026): Raycast 2.6 opened over Edge — Raycast is a non-activating
+// panel, so FrontmostApp stays Edge while IMK reports client=com.raycast.macos. The
+// front merge made Raycast's own keys tap-defer (Edge page content → tap) and the tap
+// backspace-retyped into Raycast, which applies ⌫ after the inserts ("wngs" → "ưnứ";
+// the logged tap-emit bs/ins matched the engine 1:1). Contract: overlay launchers
+// route by their OWN rule (inPlace) and the tap yields while IMK serves them.
+final class OverlayLauncherRoutingTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        Accessibility.testTrustOverride = true
+    }
+
+    override func tearDown() {
+        Accessibility.testTrustOverride = nil
+        ClientFocus.noteActivated(client: nil)
+        super.tearDown()
+    }
+
+    func testRaycastIsOverlayLauncher() {
+        XCTAssertTrue(AppState.isOverlayLauncher("com.raycast.macos"))
+        XCTAssertFalse(AppState.isOverlayLauncher("com.microsoft.edgemac"))
+        XCTAssertFalse(AppState.isOverlayLauncher(nil))
+    }
+
+    func testRaycastOverEdgeOrTerminalComposesViaIMKit() {
+        for front in ["com.microsoft.edgemac", "com.google.Chrome", "com.apple.Terminal", "com.vng.zalo"] {
+            let r = AppState.shared.tapRouting("com.raycast.macos", front: front)
+            XCTAssertFalse(r.tapDefer, "Raycast over \(front): its own inPlace rule decides")
+        }
+    }
+
+    func testOtherClientsStillMergeWithFront() {
+        XCTAssertTrue(AppState.shared.tapRouting(nil, front: "com.apple.Terminal").tapDefer)
+        // Unrelated in-place client over a terminal keeps the old safety net.
+        XCTAssertTrue(AppState.shared.tapRouting("com.apple.Notes", front: "com.apple.Terminal").tapDefer)
+    }
+
+    func testTapYieldsWhileLauncherLatched() {
+        XCTAssertTrue(TerminalTapController.overlayLauncherOwnsKeys(
+            latchedLauncher: "com.raycast.macos", front: "com.microsoft.edgemac", manualPin: { _ in nil }))
+        for pin: AppState.AppMode in [.auto, .inPlace, .marked, .axDetect, .passthrough] {
+            XCTAssertTrue(TerminalTapController.overlayLauncherOwnsKeys(
+                latchedLauncher: "com.raycast.macos", front: "com.apple.Terminal", manualPin: { _ in pin }),
+                "pin=\(pin)")
+        }
+    }
+
+    func testExplicitTapFamilyPinOnLauncherKeepsTap() {
+        for pin: AppState.AppMode in [.tap, .selection, .emptyReset] {
+            XCTAssertFalse(TerminalTapController.overlayLauncherOwnsKeys(
+                latchedLauncher: "com.raycast.macos", front: "com.apple.Terminal", manualPin: { _ in pin }))
+        }
+    }
+
+    func testNoLatchNeverYields() {
+        XCTAssertFalse(TerminalTapController.overlayLauncherOwnsKeys(
+            latchedLauncher: nil, front: "com.apple.Terminal",
+            manualPin: { _ in XCTFail("no latch → pin must not be read"); return nil }))
+        // Latched id == front (launcher genuinely frontmost, e.g. its settings window):
+        // the tap's own routing already answers for it.
+        XCTAssertFalse(TerminalTapController.overlayLauncherOwnsKeys(
+            latchedLauncher: "com.raycast.macos", front: "com.raycast.macos", manualPin: { _ in nil }))
+    }
+
+    func testLatchFollowsIMKActivation() {
+        ClientFocus.noteActivated(client: "com.raycast.macos")
+        XCTAssertEqual(ClientFocus.overlayLauncher, "com.raycast.macos")
+        // Esc → Edge's field re-activates: the panel no longer owns the keyboard.
+        ClientFocus.noteActivated(client: "com.microsoft.edgemac")
+        XCTAssertNil(ClientFocus.overlayLauncher)
+        ClientFocus.noteActivated(client: "com.raycast.macos")
+        ClientFocus.noteActivated(client: nil)
+        XCTAssertNil(ClientFocus.overlayLauncher)
+    }
+}
+
 // Field report 2026-08-11: Esc in Spotlight resets the query without closing the
 // overlay, cycling activateServer(iTerm)→activateServer(Spotlight) within ~1ms. The
 // freshly re-activated session's client.selectedRange() then reported a stale huge

@@ -821,7 +821,12 @@ final class AppState: @unchecked Sendable {
             // the same word over TextMate (in-place, no tap wants) worked fine. The
             // tap already force-passes Spotlight's own keys raw independently
             // (spotlightOverlayForcesRaw), so this merge buys Spotlight nothing.
-            if let f = front, f != bundleID, !Self.isSpotlight(bundleID) {
+            // Same for overlay launchers (issue #110, Raycast): a non-activating
+            // panel whose client id IMK reports faithfully while FrontmostApp stays
+            // the app behind it — merging Edge's per-field wants sent Raycast's own
+            // keys down the tap backspace-retype path.
+            if let f = front, f != bundleID, !Self.isSpotlight(bundleID),
+               !Self.isOverlayLauncher(bundleID) {
                 w = Self.mergedWants(w, _rawWants(f))
             }
             return w
@@ -978,6 +983,19 @@ final class AppState: @unchecked Sendable {
     static func isSpotlight(_ bundleID: String?) -> Bool {
         guard let id = bundleID else { return false }
         return id == spotlightBundleID || id == spotlightCampoBundleID
+    }
+    /// Overlay launcher = NON-ACTIVATING panel (cùng lớp Spotlight): IMK báo đúng
+    /// client id của nó, còn FrontmostApp vẫn là app PHÍA SAU. Issue #110 (02/10/2026,
+    /// Raycast 2.6 trên Edge): routing gộp wants của Edge (per-field → nội dung trang
+    /// → tap) vào client Raycast, tap bắn ⌫+gõ-lại vào ô Raycast và Raycast áp ⌫ SAU
+    /// chữ chèn ("wngs" → "ưnứ", tap-emit trong log khớp 1:1 với engine). Với các id
+    /// này: routing theo CHÍNH client (rule inPlace của nó), tap nhường phím cho IMK
+    /// khi IMK đang phục vụ panel (ClientFocus.overlayLauncher). Chỉ thêm id khi đã có
+    /// report — Alfred/LaunchBar chưa có lỗi nào trên đường tap.
+    static let overlayLauncherBundleIDs: Set<String> = ["com.raycast.macos"]
+    static func isOverlayLauncher(_ bundleID: String?) -> Bool {
+        guard let id = bundleID else { return false }
+        return overlayLauncherBundleIDs.contains(id)
     }
     /// Ép tay cho Spotlight: pin ở BẤT KỲ id nào trong hai id cũng áp cho cả hai
     /// (Bảng cơ chế gõ chỉ có một dòng "Spotlight").

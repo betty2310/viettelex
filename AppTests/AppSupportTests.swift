@@ -888,6 +888,52 @@ final class ReEditWordTests: XCTestCase {
 // itself needs a live focused element, same limitation as the IMKit version above.
 final class ReEditWordTapGateTests: XCTestCase {
 
+    /// Issue #111 (Zalo, 02/10/2026): click sang hội thoại khác → activateServer →
+    /// phím "w" đầu tiên seed chữ CŨ ("dà") từ AX → "ằ", "word␣" ra "dafword".
+    /// Chuỗi thật: phím trong ô A, click (tap thấy TRƯỚC khi app đổi focus),
+    /// activateServer, rồi phím đầu tiên trong ô B — phím đó không được tin AX.
+    func testFirstKeyAfterFocusChangeIsNotStable() {
+        var a = FocusAnchor()
+        var epoch: UInt64 = 7
+        _ = a.observe(epoch)                    // gõ trong ô A
+        XCTAssertTrue(a.observe(epoch))         // phím tiếp theo, cùng ô
+        _ = a.observe(epoch)                    // click vào danh sách hội thoại
+        epoch += 1                              // Zalo đổi focus → activateServer
+        XCTAssertFalse(a.observe(epoch), "phím đầu trong ô mới: AX có thể còn là ô cũ")
+        XCTAssertTrue(a.observe(epoch), "từ phím thứ hai trong ô mới: như cũ")
+    }
+
+    /// Ca chính của re-edit giữ nguyên: click ở cuối một từ TRONG ô đang focus
+    /// (không activateServer) rồi gõ dấu.
+    func testClickInsideSameFieldStaysStable() {
+        var a = FocusAnchor()
+        _ = a.observe(3)                        // phím trước
+        _ = a.observe(3)                        // click cuối từ, không đổi focus
+        XCTAssertTrue(a.observe(3))
+    }
+
+    /// Click sang ô khác (activateServer tới SAU click) rồi click lần nữa trong ô
+    /// đó: click sau neo lại → re-edit mở.
+    func testSecondClickAfterFocusChangeReArms() {
+        var a = FocusAnchor()
+        _ = a.observe(1)                        // click đổi ô
+        _ = a.observe(2)                        // click lại trong ô mới (sau activate)
+        XCTAssertTrue(a.observe(2))
+    }
+
+    /// Chưa từng neo (phím đầu tiên từ khi chạy tap) → không tin.
+    func testNeverAnchoredIsNotStable() {
+        var a = FocusAnchor()
+        XCTAssertFalse(a.observe(0))
+    }
+
+    func testClientFocusEpochAdvancesOnEveryActivation() {
+        let e0 = ClientFocus.epoch
+        ClientFocus.noteActivated(client: "com.vng.zalo")
+        ClientFocus.noteActivated(client: "com.vng.zalo")
+        XCTAssertEqual(ClientFocus.epoch, e0 &+ 2, "re-activate cùng app vẫn là đổi focus")
+    }
+
     /// Issue #62 (Zalo, 26/08/2026): ⌫ nhanh rồi gõ "s" → seed AX cũ → "asa".
     /// Seed bị cấm trong cooldown sau ⌫ vật lý và khi queue synthetic chưa drain.
     func testNoSeedRightAfterPhysicalDelete() {

@@ -1992,8 +1992,14 @@ final class TelexInputController: IMKInputController {
         fieldForcedMarked = false
         fieldVerifyStrikes = 0
         fieldInconclusive = 0
-        if let client = sender as? IMKTextInput {
+        let activatedClient = sender as? IMKTextInput
+        if let client = activatedClient {
             AppState.shared.currentBundleID = client.bundleIdentifier()
+        }
+        // Tap-side view of this activation: focus epoch for re-edit(tap) (#111) and
+        // the overlay-launcher latch (#110). Before anything else reads the client.
+        ClientFocus.noteActivated(client: activatedClient != nil ? AppState.shared.currentBundleID : nil)
+        if activatedClient != nil {
             // Spotlight took focus: stamp the visibility cache NOW — the overlay-raw
             // gate in the tap must not wait for a CGWindowList scan that only lands
             // after the first keys have already been mis-composed (2026-07-31).
