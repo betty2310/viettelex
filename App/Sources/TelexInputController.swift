@@ -77,6 +77,10 @@ final class TelexInputController: IMKInputController {
     /// PRIOR one closely enough that the fresh client's selectedRange() cannot be
     /// trusted as a real caret. Consumed by the very next word-start anchor.
     private var distrustNextAnchor = false
+    /// Issue #110 vòng 2: phiên này là một overlay launcher (Raycast) vừa được activate
+    /// — phím từ đầu tiên thử nhận lại từ mà tap đã chèn trước activateServer
+    /// (TapHandoff). Một lần mỗi activation; mọi client khác: false, không tốn gì.
+    private var pendingTapHandoff = false
 
     /// Pure so the 5s window is pinned by a test without mocking IMKTextInput.
     /// lastActivateNs == 0 means "never activated before" — never distrust the
@@ -939,6 +943,18 @@ final class TelexInputController: IMKInputController {
             }
         }
 
+        // Overlay launcher's first word key (#110): the tap may already have typed the
+        // start of this word before IMK activated the panel — adopt it if the screen
+        // proves it. One-shot per activation; a Bool test for every other client.
+        if pendingTapHandoff {
+            pendingTapHandoff = false
+            if engine.isEmpty, tracking, selToClear == 0, !markedNow, !edgeTapWord {
+                tryAdoptTapHandoff(caret: anchor, client, id: id)
+            } else {
+                TapHandoff.clear()
+            }
+        }
+
         // RE-EDIT (experimental, opt-in): a tone/mark key on an EMPTY engine right after a
         // word means "add this diacritic to that word" ("toan" + s → toán). Seed the
         // engine from the text on screen so the normal replace machinery does the edit.
@@ -1190,6 +1206,37 @@ final class TelexInputController: IMKInputController {
         onLen = wordLen
         anchorVerified = true
         DebugLog.log("re-edit \(id ?? "?"): seeded \(wordLen) chars before caret")
+    }
+
+    /// TapHandoff (#110 vòng 2): ô Raycast đang chứa chữ tap chèn cho phím đầu (vd "ư"
+    /// từ "w") mà engine IMK mới không biết. Đọc lại chữ trước con trỏ; chỉ khi khớp
+    /// CHÍNH XÁC chữ tap đã chèn (và các điều kiện của TapHandoff.adoptable) mới phát
+    /// lại phím thô vào engine và trỏ cửa sổ soạn vào đúng chữ đó — giống hệt re-edit
+    /// sau khi seed. Không khớp: im lặng, như bản 1.8.8.
+    private func tryAdoptTapHandoff(caret: Int, _ client: IMKTextInput, id: String?) {
+        guard let snap = TapHandoff.take() else { return }
+        let len = (snap.composed as NSString).length
+        guard len > 0, caret >= len else {
+            DebugLog.log("tap-handoff \(id ?? "?"): skipped (caret=\(caret) len=\(len))")
+            return
+        }
+        let window = min(caret, 24)
+        let text = client.attributedSubstring(from: NSRange(location: caret - window, length: window))?.string ?? ""
+        guard TapHandoff.adoptable(snap, nowNs: DispatchTime.now().uptimeNanoseconds,
+                                   epochNow: ClientFocus.epoch,
+                                   latchedLauncher: ClientFocus.overlayLauncher,
+                                   clientID: id, textBeforeCaret: text) != nil else {
+            DebugLog.log("tap-handoff \(id ?? "?"): skipped (screen/epoch/age mismatch, len=\(len))")
+            return
+        }
+        guard TapHandoff.replay(&engine, raw: snap.raw, expect: snap.composed) else {
+            DebugLog.log("tap-handoff \(id ?? "?"): skipped (replay mismatch)")
+            return
+        }
+        anchor = caret - len
+        onLen = len
+        anchorVerified = true
+        DebugLog.log("tap-handoff \(id ?? "?"): adopted \(len) chars typed by the tap before activateServer")
     }
 
     // MARK: - Re-open the last committed word on ⌫ (issue #40)
@@ -1999,6 +2046,7 @@ final class TelexInputController: IMKInputController {
         // Tap-side view of this activation: focus epoch for re-edit(tap) (#111) and
         // the overlay-launcher latch (#110). Before anything else reads the client.
         ClientFocus.noteActivated(client: activatedClient != nil ? AppState.shared.currentBundleID : nil)
+        pendingTapHandoff = activatedClient != nil && AppState.isOverlayLauncher(AppState.shared.currentBundleID)
         if activatedClient != nil {
             // Spotlight took focus: stamp the visibility cache NOW — the overlay-raw
             // gate in the tap must not wait for a CGWindowList scan that only lands

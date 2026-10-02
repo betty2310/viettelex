@@ -305,6 +305,20 @@ final class FrontmostApp {
     private var _bundleID: String?
     var bundleID: String? { lock.withLock { _bundleID } }
 
+    /// Có tiến trình overlay launcher nào (AppState.overlayLauncherBundleIDs) đang chạy
+    /// không — cổng chi phí của TapHandoff (issue #110): không có Raycast thì tap không
+    /// chụp gì. Cập nhật bằng KVO runningApplications (chỉ khi app mở/tắt), đọc 1 lock trip ở
+    /// mỗi lần tap-emit (không phải mỗi phím).
+    private var _overlayLauncherRunning = false
+    var overlayLauncherRunning: Bool { lock.withLock { _overlayLauncherRunning } }
+    static func anyOverlayLauncher(_ ids: [String?]) -> Bool {
+        ids.contains { AppState.isOverlayLauncher($0) }
+    }
+    private func refreshOverlayLaunchers() {
+        let running = Self.anyOverlayLauncher(NSWorkspace.shared.runningApplications.map(\.bundleIdentifier))
+        lock.withLock { _overlayLauncherRunning = running }
+    }
+
     /// Most-recently-activated apps (newest first, distinct), EXCLUDING VietTelex
     /// itself — so Settings can offer "recent apps" to pin without typing a bundle id.
     /// MAIN-thread only (observer writes, Settings UI reads) — no lock needed.
@@ -328,7 +342,14 @@ final class FrontmostApp {
             self.recent.insert((id, app?.localizedName ?? id), at: 0)
             if self.recent.count > 10 { self.recent.removeLast() }
         }
+        refreshOverlayLaunchers()
+        // KVO, không phải didLaunch/didTerminate: Raycast là LSUIElement agent, loại
+        // app mà các notification đó không đảm bảo báo. Chỉ chạy khi có app mở/tắt.
+        runningAppsObservation = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
+            self?.refreshOverlayLaunchers()
+        }
     }
+    private var runningAppsObservation: NSKeyValueObservation?
 }
 
 /// TTL backoff shared by the three AX/window-list verdict caches below. While the user
@@ -377,6 +398,71 @@ enum ClientFocus {
 
     static var epoch: UInt64 { lock.withLock { _epoch } }
     static var overlayLauncher: String? { lock.withLock { _overlayLauncher } }
+}
+
+/// Issue #110 vòng 2 (02/10/2026, v1.8.8, Raycast 2.6 trên Edge): CUỘC ĐUA PHÍM ĐẦU.
+/// Panel Raycast chỉ được IMK activate khi phím đầu tiên tới nó, nên phím đầu tới TAP
+/// lúc latch ClientFocus còn rỗng và front = Edge → tap soạn như Edge, chèn "ư" (từ
+/// "w") vào ô Raycast; ~40ms sau mới có activateServer client=com.raycast.macos và IMK
+/// bắt đầu engine MỚI với "ngs"/"ord" → "ưngs", "ưord " (log: tap-emit bs=0 ins=1 ngay
+/// trước activateServer, rồi applyInPlace start=1 anchor=1).
+///
+/// Không đoán trước được phím sẽ vào đâu (panel non-activating: frontmost vẫn Edge,
+/// không có tín hiệu rẻ nào trước activateServer). Thay vào đó HOÀ GIẢI sau: mỗi lần
+/// tap tự chèn chữ cho một từ (chỉ khi có launcher đang chạy), nó chụp phím thô + chữ
+/// đã chèn. Phím từ ĐẦU TIÊN mà IMK nhận trong launcher nhận lại ảnh chụp đó — CHỈ khi
+/// đúng một activateServer kể từ lúc chụp, còn tươi, và chữ trước con trỏ trong ô
+/// khớp CHÍNH XÁC chữ tap đã chèn (đọc lại). Khi đó engine IMK được phát lại đúng các
+/// phím thô ("w") nên từ đi tiếp như gõ liền một mạch ("ứng", "word " — khôi phục
+/// tiếng Anh dùng raw "word", không phải "uword"). Lệch bất cứ điều gì → bỏ, y như cũ.
+enum TapHandoff {
+    struct Snapshot: Equatable {
+        let raw: String
+        let composed: String
+        let atNs: UInt64
+        let epoch: UInt64
+    }
+    /// Log: tap-emit → phím IMK đầu tiên 57–103ms. Rộng tay cho người gõ chậm; cổng
+    /// thật là đếm phím (tap xoá ảnh chụp ở phím vật lý thứ 2 sau lần chụp) + đọc lại.
+    static let maxAgeNs: UInt64 = 3_000_000_000
+
+    private static let lock = NSLock()
+    private static var _pending: Snapshot?
+
+    static func record(_ s: Snapshot) { lock.withLock { _pending = s } }
+    static func clear() { lock.withLock { _pending = nil } }
+    /// Một lần duy nhất: lấy ra là xoá.
+    static func take() -> Snapshot? { lock.withLock { defer { _pending = nil }; return _pending } }
+
+    /// Có được nhận ảnh chụp cho phím từ đầu tiên của `clientID` không. Pure để test.
+    /// - client là overlay launcher và chính nó đang được latch (IMK đang phục vụ nó);
+    /// - đúng MỘT activateServer kể từ lúc chụp (lần activate của launcher) — chụp từ
+    ///   trước một lần đổi focus khác thì không phải chữ của phiên này;
+    /// - còn tươi;
+    /// - từ ngay trước con trỏ trong ô == chữ tap đã chèn, so UTF-16 chính xác.
+    static func adoptable(_ s: Snapshot?, nowNs: UInt64, epochNow: UInt64,
+                          latchedLauncher: String?, clientID: String?,
+                          textBeforeCaret: String) -> Snapshot? {
+        guard let s, !s.composed.isEmpty, !s.raw.isEmpty,
+              AppState.isOverlayLauncher(clientID), latchedLauncher == clientID,
+              epochNow == s.epoch &+ 1,
+              nowNs >= s.atNs, nowNs &- s.atNs <= maxAgeNs,
+              let word = TelexInputController.trailingWord(textBeforeCaret),
+              word.utf16.elementsEqual(s.composed.utf16)
+        else { return nil }
+        return s
+    }
+
+    /// Phát lại đúng phím thô vào engine (đã reset); true nếu ra đúng chữ đã chèn.
+    /// Sai → engine reset, caller để mọi thứ như cũ.
+    static func replay(_ engine: inout TelexEngine, raw: String, expect: String) -> Bool {
+        engine.reset()
+        for ch in raw { _ = engine.feed(ch) }
+        guard engine.composed.unicodeScalars.elementsEqual(expect.unicodeScalars) else {
+            engine.reset(); return false
+        }
+        return true
+    }
 }
 
 /// Issue #111 (Zalo, 02/10/2026): đang ở ô chat A, bấm sang hội thoại B rồi gõ "w" →
@@ -2313,6 +2399,11 @@ final class TerminalTapController {
     /// TAP-thread confined.
     private var reEditFocus = FocusAnchor()
     private var reEditFocusStable = true
+    /// TapHandoff (#110): số phím vật lý kể từ lần chụp gần nhất, -1 = không có ảnh
+    /// chụp. Phím thứ 2 (hoặc click) xoá ảnh chụp — chỉ phím NGAY SAU lần chèn mới có
+    /// thể là phím đầu IMK nhận trong launcher. Không có ảnh chụp: một phép so Int.
+    /// TAP-thread confined.
+    private var handoffKeys = -1
     // Phím trước từ hiện tại là chữ số → không nở gõ tắt cho từ đó (issue #82, "5h").
     private var lastTapKeyWasDigit = false
     /// Gõ tắt khoá ký hiệu/số ("->", "k2"): cụm đã chốt liền trước từ hiện tại, dựng
@@ -2680,6 +2771,7 @@ final class TerminalTapController {
             CaretHint.shared.dismissForClick(at: event.location)
             lastTapKeyWasBoundary = false   // click at a word's end re-arms re-edit
             _ = reEditFocus.observe(ClientFocus.epoch)   // click = neo focus mới (#111)
+            if handoffKeys >= 0 { TapHandoff.clear(); handoffKeys = -1 }   // #110
             lastTapKeyWasDigit = false
             chordRecognizer.disarm()        // click giữa lúc giữ chord = không phải toggle
             // Sticky-source: click trong dải menu bar = user có thể đang tự đổi input
@@ -2700,6 +2792,10 @@ final class TerminalTapController {
 
         // Mọi phím vật lý (cả chord ⌘K đổi hội thoại) neo focus cho re-edit (#111).
         reEditFocusStable = reEditFocus.observe(ClientFocus.epoch)
+        if handoffKeys >= 0 {
+            handoffKeys += 1
+            if handoffKeys > 1 { TapHandoff.clear(); handoffKeys = -1 }
+        }
 
         // Gõ tắt hoàn tác: chỉ ⌫ NGAY SAU lần nở — mọi phím thật khác tiêu thụ nó.
         let pendingShortcutUndo = shortcutUndo
@@ -3196,15 +3292,28 @@ final class TerminalTapController {
                 return pass                               // native: zero synthetic events
             }
             SyntheticKeyboard.apply(backspaces: 0, insert: String(ch), mode: emitMode)
+            noteHandoff()
         case .none:
             break
         case let .replace(bs, insert):
             // B1: a single-char transform (w→ư) rewrites this event in place; anything
             // with backspaces, multi-char, or a draining burst keeps the synthetic path.
-            if modifyInPlace(event: event, backspaces: bs, insert: insert) { return pass }
+            if modifyInPlace(event: event, backspaces: bs, insert: insert) { noteHandoff(); return pass }
             SyntheticKeyboard.apply(backspaces: bs, insert: insert, mode: emitMode)
+            noteHandoff()
         }
         return nil
+    }
+
+    /// TapHandoff (#110): tap vừa tự đặt chữ của từ đang soạn lên màn hình. Nếu phím
+    /// này thực ra đã rơi vào một overlay launcher chưa kịp activate, phím IMK đầu tiên
+    /// ở đó sẽ nhận lại từ này. Không có launcher nào đang chạy: một lock trip, xong.
+    private func noteHandoff() {
+        guard FrontmostApp.shared.overlayLauncherRunning else { return }
+        TapHandoff.record(.init(raw: engine.rawKeystrokes, composed: engine.composed,
+                                atNs: DispatchTime.now().uptimeNanoseconds,
+                                epoch: ClientFocus.epoch))
+        handoffKeys = 0
     }
 
     /// Task B1 — modify the physical CGEvent in place instead of suppress + post.
