@@ -39,5 +39,8 @@
       "viettelex_1.0.4.noble1_all.deb": "c5f9070c78b8722bb18d6e986941d8624515565884e4769d8487b2d1a4df06d2"
     },
     "notes": "Công cụ văn bản cho vùng chọn, giao diện tiếng Anh, icon khay Vᴛ/E, tự cập nhật một chạm, gói gộp viettelex + lệnh cài một dòng, sửa gõ dấu khi đang chọn chữ trong GTK3, gói nhỏ hơn."
+  },
+  "android": {
+    "play": "https://play.google.com/store/apps/details?id=com.viettelex.android"
   }
 }

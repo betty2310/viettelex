@@ -22,10 +22,7 @@ File gốc tải nguyên trạng từ Apple/Google (28/09/2026) và Microsoft (2
   `https://apps.apple.com/app/id6794425455`.
 - Google — [Google Play badge guidelines](https://partnermarketinghub.withgoogle.com/brands/google-play/visual-identity/badge-guidelines/),
   [badge generator](https://play.google.com/intl/en_us/badges/): PNG đã có sẵn khoảng trống, không cắt/đổi màu;
-  kích thước hiển thị tương đương huy hiệu App Store. **Chỉ hiện khi đã có trang Play công khai** — hiện tại app
-  Android chưa lên Play nên trang chỉ ghi “Sắp có trên Google Play”; khi `stable.json` có
-  `"android": {"play": "https://play.google.com/store/apps/details?id=com.viettelex.android"}` thì `download.js`
-  tự thay bằng huy hiệu này.
+  kích thước hiển thị tương đương huy hiệu App Store. Huy hiệu viết sẵn trong HTML, dẫn tới `https://play.google.com/store/apps/details?id=com.viettelex.android` (app lên Play 03/10/2026).
 
 - Microsoft — [Microsoft Store badges](https://apps.microsoft.com/badge): huy hiệu tối, bản địa hoá theo trang,
   cao 48 px như các huy hiệu khác, dẫn tới `https://apps.microsoft.com/detail/xp9cbqk2f77356`.

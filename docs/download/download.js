@@ -135,18 +135,9 @@
     if (w.arm64) link("winArm", w.arm64, (EN ? "Download " : "Tải ") + w.version + " · ARM64 (.msi)");
     if (w.notes && !EN) setText("#winNotes", w.notes);
 
-    // Android chưa có mục trong stable.json; khi có {version, apk, play} thì tự dùng.
+    // Android: huy hiệu Google Play đã viết sẵn trong HTML; stable.json.android {version, apk} (nếu có) cập nhật nút APK.
     var an = d.android;
     if (an && an.apk) { link("apkBtn", an.apk, (EN ? "Download APK " : "Tải APK ") + (an.version || "")); setText('[data-ver="android"]', an.version || S.latest); }
-    // Chỉ dùng huy hiệu Google Play khi đã có trang Play công khai (guideline: huy hiệu phải dẫn tới listing thật).
-    if (an && an.play && /^https:\/\/play\.google\.com\//.test(an.play)) {
-      var pb = document.getElementById("playBtn");
-      if (pb) {
-        pb.outerHTML = '<a class="badge-link" id="playBtn" href="' + esc(an.play) + '" rel="noopener"><img class="badge-play" src="' +
-          esc(pb.getAttribute("data-badge")) + '" alt="' + esc(pb.getAttribute("data-badge-alt")) + '"></a>';
-      }
-    }
-
     var l = d.linux, box = document.getElementById("debs");
     setText('[data-ver="linux"]', (l && l.version) || S.latest);
     if (l && l.notes && !EN) setText("#linuxNotes", l.notes);

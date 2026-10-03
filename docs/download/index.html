@@ -31,9 +31,9 @@
 
 <main class="layout">
   <div class="tabs" role="tablist" aria-label="Nền tảng" aria-orientation="vertical">
-    <button class="tab" role="tab" id="t-ios" data-os="ios" aria-controls="p-ios" aria-selected="false"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M10.5 5.2h3M10 18.6h4"/></svg></span><span>iPhone &amp; iPad<small>iOS / iPadOS</small></span></button>
+    <button class="tab" role="tab" id="t-macos" data-os="macos" aria-controls="p-macos" aria-selected="false"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="4.5" y="5" width="15" height="10.5" rx="1.6"/><path d="M2.5 19h19"/></svg></span><span>macOS<small>Apple Silicon &amp; Intel</small></span></button>
+    <button class="tab" role="tab" id="t-ios" data-os="ios" aria-controls="p-ios" aria-selected="false" tabindex="-1"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M10.5 5.2h3M10 18.6h4"/></svg></span><span>iPhone &amp; iPad<small>iOS / iPadOS</small></span></button>
     <button class="tab" role="tab" id="t-android" data-os="android" aria-controls="p-android" aria-selected="false" tabindex="-1"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path fill-rule="evenodd" d="M3.6 18.5a8.4 8.4 0 0 1 16.8 0zM9.3 13.9a1.05 1.05 0 1 0-2.1 0a1.05 1.05 0 1 0 2.1 0zm7.5 0a1.05 1.05 0 1 0-2.1 0a1.05 1.05 0 1 0 2.1 0z"/><path d="M7.4 8.9 5.6 5.8M16.6 8.9l1.8-3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><span>Android<small>Điện thoại, Chromebook</small></span></button>
-    <button class="tab" role="tab" id="t-macos" data-os="macos" aria-controls="p-macos" aria-selected="false" tabindex="-1"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="4.5" y="5" width="15" height="10.5" rx="1.6"/><path d="M2.5 19h19"/></svg></span><span>macOS<small>Apple Silicon &amp; Intel</small></span></button>
     <button class="tab" role="tab" id="t-windows" data-os="windows" aria-controls="p-windows" aria-selected="false" tabindex="-1"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><rect x="3.5" y="3.5" width="7.8" height="7.8" rx="1"/><rect x="12.7" y="3.5" width="7.8" height="7.8" rx="1"/><rect x="3.5" y="12.7" width="7.8" height="7.8" rx="1"/><rect x="12.7" y="12.7" width="7.8" height="7.8" rx="1"/></svg></span><span>Windows<small>10 / 11 · x64, ARM64</small></span></button>
     <button class="tab" role="tab" id="t-linux" data-os="linux" aria-controls="p-linux" aria-selected="false" tabindex="-1"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path fill-rule="evenodd" d="M12 2.2c-2.7 0-4.3 2.1-4.3 4.8 0 1.4-.5 2.5-1.5 3.9C4.9 12.7 4 14.7 4 16.8c0 2.3 1.5 3.8 3.1 4.2h9.8c1.6-.4 3.1-1.9 3.1-4.2 0-2.1-.9-4.1-2.2-5.9-1-1.4-1.5-2.5-1.5-3.9 0-2.7-1.6-4.8-4.3-4.8zM12 10.9c-1.8 0-3.1 1.9-3.1 4.3s1.3 4.3 3.1 4.3 3.1-1.9 3.1-4.3-1.3-4.3-3.1-4.3zM11.4 6.4a.8.8 0 1 0-1.6 0a.8.8 0 1 0 1.6 0zm2.8 0a.8.8 0 1 0-1.6 0a.8.8 0 1 0 1.6 0zM12 7.9l1.4 1-1.4 1-1.4-1z"/><path d="M4.3 21.3c.2-1.2 2-1.9 3.9-1.5 1.1.2 1.5 1 1 1.7H4.6c-.2 0-.3-.1-.3-.2zm15.4 0c-.2-1.2-2-1.9-3.9-1.5-1.1.2-1.5 1-1 1.7h4.6c.2 0 .3-.1.3-.2z"/></svg></span><span>Linux<small>Ubuntu 22.04 / 24.04</small></span></button>
     <div class="sep" role="presentation"></div>
@@ -42,7 +42,7 @@
 
   <div class="panels">
     <!-- iPhone / iPad -->
-    <section class="panel" id="p-ios" role="tabpanel" aria-labelledby="t-ios" tabindex="0">
+    <section class="panel" id="p-ios" role="tabpanel" aria-labelledby="t-ios" tabindex="0" hidden>
       <div class="panel-head"><h2>ViệtTelex cho iPhone &amp; iPad</h2></div>
       <p class="sub">Bàn phím tiếng Việt Telex/VNI với gợi ý từ, gõ vuốt, mẫu câu, clipboard.</p>
       <div class="primary">
@@ -62,26 +62,26 @@
 
     <!-- Android -->
     <section class="panel" id="p-android" role="tabpanel" aria-labelledby="t-android" tabindex="0" hidden>
-      <div class="panel-head"><h2>ViệtTelex cho Android</h2><span class="pill beta">Thử nghiệm</span></div>
+      <div class="panel-head"><h2>ViệtTelex cho Android</h2><span class="pill">Google Play</span></div>
       <p class="sub">Bàn phím Telex/VNI cho điện thoại, máy tính bảng và Chromebook.</p>
       <div class="primary">
-        <span class="btn soon" id="playBtn" data-badge="/download/badges/google-play-vi.png" data-badge-alt="Tải trên Google Play"><span class="glyph" aria-hidden="true">▶</span><span>Sắp có trên Google Play</span></span>
-        <a class="btn" id="apkBtn" href="https://github.com/ptrinh/viettelex/releases/download/android-v1.1.1/VietTelex-android-1.1.1.apk" rel="noopener">⬇︎ <span class="lbl">Tải APK 1.1.1</span></a>
+        <a class="badge-link" id="playBtn" href="https://play.google.com/store/apps/details?id=com.viettelex.android" rel="noopener"><img class="badge-play" src="/download/badges/google-play-vi.png" alt="Tải trên Google Play"></a>
+        <a class="btn ghost" id="apkBtn" href="https://github.com/ptrinh/viettelex/releases/download/android-v1.1.1/VietTelex-android-1.1.1.apk" rel="noopener">⬇︎ <span class="lbl">Tải APK 1.1.1</span></a>
       </div>
-      <ul class="facts"><li>Android 8.0 trở lên</li><li>Miễn phí</li><li>APK ký bởi tác giả</li></ul>
+      <ul class="facts"><li>Android 8.0 trở lên</li><li>Miễn phí</li><li>Tự cập nhật qua Google Play</li></ul>
       <div class="block">
-        <h3>Cài bằng APK</h3>
+        <h3>Sau khi cài</h3>
         <ol class="steps">
-          <li>Mở file <code>.apk</code> vừa tải; nếu máy hỏi, cho phép trình duyệt <b>cài ứng dụng không rõ nguồn gốc</b>.</li>
+          <li>Bấm <b>Cài đặt</b> trên Google Play (hoặc mở file <code>.apk</code> nếu tải APK; máy hỏi thì cho phép <b>cài ứng dụng không rõ nguồn gốc</b>).</li>
           <li>Mở app VietTelex → bấm <b>Bật VietTelex</b> (Cài đặt → Hệ thống → Ngôn ngữ &amp; nhập liệu → Bàn phím trên màn hình), rồi <b>Chọn VietTelex</b>.</li>
           <li>Cảnh báo “có thể thu thập mọi văn bản bạn nhập” là cảnh báo chung của Android cho mọi bàn phím bên thứ ba — VietTelex chạy hoàn toàn trên máy.</li>
         </ol>
-        <p class="note">Bản trên Google Play sẽ tự cập nhật; bản APK cập nhật bằng cách tải bản mới và cài đè. <a href="https://github.com/ptrinh/viettelex/releases?q=android&amp;expanded=true" rel="noopener">Mọi bản Android</a> · <a href="/hdsd/?os=android#bat-dau">Hướng dẫn chi tiết →</a></p>
+        <p class="note">Bản Google Play tự cập nhật; bản APK cập nhật bằng cách tải bản mới và cài đè. <a href="https://github.com/ptrinh/viettelex/releases?q=android&amp;expanded=true" rel="noopener">Mọi bản Android</a> · <a href="/hdsd/?os=android#bat-dau">Hướng dẫn chi tiết →</a></p>
       </div>
     </section>
 
     <!-- macOS -->
-    <section class="panel" id="p-macos" role="tabpanel" aria-labelledby="t-macos" tabindex="0" hidden>
+    <section class="panel" id="p-macos" role="tabpanel" aria-labelledby="t-macos" tabindex="0">
       <div class="panel-head"><h2>ViệtTelex cho macOS</h2><span class="pill">phiên bản <span data-ver="mac">…</span></span></div>
       <p class="sub">Bộ gõ chuẩn InputMethodKit: không gạch chân, gõ được trong Terminal, iTerm, Chrome.</p>
       <div class="primary">
