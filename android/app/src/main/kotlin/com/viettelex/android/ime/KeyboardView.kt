@@ -81,6 +81,8 @@ class KeyboardView(
         fun onVoiceInput()
         /** Mục ✋ menu giữ 😊: bật/tắt một tay (IME nhớ bên cũ). */
         fun onToggleOneHand()
+        /** Mục 🪟 menu giữ 😊: bật/tắt bàn phím thả nổi (#112). */
+        fun onToggleFloating() {}
         /** Mục ⚙ menu giữ 😊: mở app VietTelex. */
         fun onOpenSettings()
         fun onDismissKeyboard()
@@ -1481,13 +1483,18 @@ class KeyboardView(
         EmojiKeyAction.VOICE -> ImeIcons.MIC
         // Đang một tay ⇒ mục là "thoát" (icon ↔ đầy bề ngang như rail).
         EmojiKeyAction.ONE_HAND -> if (oneHand != OneHandSide.OFF) ImeIcons.EXPAND else ImeIcons.ONE_HAND
+        EmojiKeyAction.FLOATING -> if (floatingOn) ImeIcons.DOCK else ImeIcons.FLOAT
         EmojiKeyAction.SETTINGS -> ImeIcons.SETTINGS
     }
 
+    /** Bàn phím đang thả nổi (IME đặt) — menu giữ 😊: 🪟 thành "gắn lại", ẩn ✋ một tay. */
+    var floatingOn = false
+
     private fun openEmojiMenu() {
         val k = ptrKey.getOrNull(globePtr)?.takeIf { it.kind == KeyKind.EMOJI } ?: return
-        val acts = EmojiKeyMenu.actions(voiceAvailable, oneHandAvailable = !theme.tablet)
-        val h = DomainPopup.Hold(acts.map { EmojiKeyMenu.label(it, oneHand != OneHandSide.OFF) })
+        val acts = EmojiKeyMenu.actions(voiceAvailable, oneHandAvailable = !theme.tablet && !floatingOn,
+            floatingAvailable = true)
+        val h = DomainPopup.Hold(acts.map { EmojiKeyMenu.label(it, oneHand != OneHandSide.OFF, floatingOn) })
         val n = acts.size
         val wDp = width / d
         val itemW = minOf(if (theme.tablet) 56f else 48f, (wDp - 4f) / n)
@@ -1525,6 +1532,7 @@ class KeyboardView(
             EmojiKeyAction.SWITCH_KEYBOARD -> listener?.onGlobe(true)
             EmojiKeyAction.VOICE -> listener?.onVoiceInput()
             EmojiKeyAction.ONE_HAND -> listener?.onToggleOneHand()
+            EmojiKeyAction.FLOATING -> listener?.onToggleFloating()
             EmojiKeyAction.SETTINGS -> listener?.onOpenSettings()
         }
     }

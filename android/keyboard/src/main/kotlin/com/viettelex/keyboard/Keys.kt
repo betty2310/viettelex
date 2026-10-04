@@ -97,6 +97,17 @@ object Keys {
     const val LONG_PRESS_SYMBOLS = "longPressSymbols"
     /** String "off" | "left" | "right" — chế độ một tay (điện thoại; tên như iOS App Group). */
     const val ONE_HAND_MODE = "oneHandMode"
+    /**
+     * Bool — bàn phím thả nổi (#112): khung nhỏ kéo đi đâu cũng được, app không bị co. Mặc định
+     * TẮT. Có sao lưu; vị trí ([FLOATING_POS_PORTRAIT] / [FLOATING_POS_LANDSCAPE]) thì không.
+     */
+    const val FLOATING_KEYBOARD = "floatingKeyboard"
+    /**
+     * String "fx,fy" (0…1, phần khoảng trống ngang/dọc còn lại) — vị trí khung thả nổi theo
+     * chiều màn hình. Lưu ở prefs trạng thái IME ("ime_state"), không sao lưu (riêng từng máy).
+     */
+    const val FLOATING_POS_PORTRAIT = "floatingPosPortrait"
+    const val FLOATING_POS_LANDSCAPE = "floatingPosLandscape"
     /** String "vi" | "en" — ngôn ngữ giao diện app + chữ trên bàn phím ([L10n]). Mặc định "vi"
      *  LUÔN (không theo ngôn ngữ máy); tên như iOS App Group. */
     const val UI_LANGUAGE = "uiLanguage"

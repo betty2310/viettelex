@@ -6,6 +6,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -124,7 +125,7 @@ class BackupTests {
             "keyboardTransparency" to 250, "keyLabelTransparency" to 35,
             BackupPrefs.SHORTCUTS_KEY to "# VietTelex — bảng gõ tắt\nko: không\n")
         val p = BackupPrefs.snapshot({ prefs[it] }, listOf(TemplateItem("", "a")), null)
-        assertEquals(40, p.settings!!.size)
+        assertEquals(41, p.settings!!.size)
         assertEquals("vi", p.settings!![Keys.UI_LANGUAGE])   // chưa chọn ⇒ mặc định Tiếng Việt
         assertEquals(100, p.settings!!["keyboardTransparency"])   // kẹp 0…100
         assertEquals(35, p.settings!!["keyLabelTransparency"])
@@ -138,6 +139,7 @@ class BackupTests {
         assertEquals(10, p.settings!!["rowHeightAdjust"])
         assertEquals(false, p.settings!![Keys.SHOW_PERIOD_KEY])   // #113 mặc định tắt
         assertEquals(0, p.settings!![Keys.KEYBOARD_RAISE])        // #112 mặc định 0
+        assertEquals(false, p.settings!![Keys.FLOATING_KEYBOARD]) // #112 thả nổi mặc định tắt
         assertNull(p.settings!!["debugTouchLog"])
         assertEquals(mapOf("ko" to "không"), p.shortcuts)
         assertNull(p.learnedWords)
@@ -175,6 +177,22 @@ class BackupTests {
         val s = KeyboardSettings.load { back[it] }
         assertEquals(true, s.showPeriodKey); assertEquals(48, s.keyboardRaise)
         assertEquals(0, KeyboardSettings.load { if (it == Keys.KEYBOARD_RAISE) -5 else null }.keyboardRaise)
+    }
+
+    /** #112: công tắc thả nổi đi theo file sao lưu; vị trí khung (riêng từng máy) thì không. */
+    @Test fun floatingBackupKeys() {
+        assertTrue(BackupSettings.byKey.containsKey(Keys.FLOATING_KEYBOARD))
+        assertFalse(BackupSettings.byKey.containsKey(Keys.FLOATING_POS_PORTRAIT))
+        assertFalse(BackupSettings.byKey.containsKey(Keys.FLOATING_POS_LANDSCAPE))
+        val a = mapOf<String, Any?>(Keys.FLOATING_KEYBOARD to true, Keys.FLOATING_POS_PORTRAIT to "0.2,0.3")
+        val p = BackupCodec.decode(BackupCodec.encode(BackupPrefs.snapshot({ a[it] }, emptyList(), null)))
+        assertEquals(true, p.settings!![Keys.FLOATING_KEYBOARD])
+        assertNull(p.settings!![Keys.FLOATING_POS_PORTRAIT])
+        val b = HashMap<String, Any?>()
+        b.putAll(BackupPrefs.plan(p, { b[it] }, emptyList()).writes)
+        assertEquals(true, b[Keys.FLOATING_KEYBOARD])
+        assertTrue(KeyboardSettings.load { b[it] }.floatingKeyboard)
+        assertFalse(KeyboardSettings.load { null }.floatingKeyboard)
     }
 
     @Test fun deviceToDeviceRoundTripThroughFile() {

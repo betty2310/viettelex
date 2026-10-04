@@ -53,7 +53,11 @@ object ImeIcons {
     const val ONE_HAND = 32
     /** Menu giữ 😊: cài đặt VietTelex (bánh răng). */
     const val SETTINGS = 33
-    private const val COUNT = 34
+    /** Menu giữ 😊: thả nổi bàn phím (khung nhỏ lơ lửng + thanh kéo). */
+    const val FLOAT = 34
+    /** Thả nổi: gắn bàn phím xuống đáy (mũi tên xuống chạm vạch đáy) — menu + nút trên thanh kéo. */
+    const val DOCK = 35
+    private const val COUNT = 36
 
     /** Thứ tự icon category của plane emoji (clock → flag). */
     val CATEGORY = intArrayOf(CLOCK, FACE, HARE, FORK_KNIFE, SOCCER, CAR, BULB, HEART, FLAG)
@@ -246,6 +250,17 @@ object ImeIcons {
                 moveTo(12f + 6.5f * cos(a).toFloat(), 12f + 6.5f * sin(a).toFloat())
                 lineTo(12f + 9.3f * cos(a).toFloat(), 12f + 9.3f * sin(a).toFloat())
             }
+        }
+        p(FLOAT, 1.6f) {
+            addRoundRect(RectF(4f, 4.5f, 20f, 15.5f), 2f, 2f, Path.Direction.CW)
+            for (i in 0..3) { val x = 7.5f + i * 3f; moveTo(x, 8.5f); lineTo(x + 0.1f, 8.5f) }
+            moveTo(9f, 12f); lineTo(15f, 12f)
+            moveTo(9.5f, 19.5f); lineTo(14.5f, 19.5f)
+        }
+        p(DOCK, 1.8f) {
+            moveTo(12f, 3.5f); lineTo(12f, 15f)
+            moveTo(7.5f, 10.5f); lineTo(12f, 15f); lineTo(16.5f, 10.5f)
+            moveTo(4.5f, 19.5f); lineTo(19.5f, 19.5f)
         }
         p(GRID, 0f) {
             addRoundRect(RectF(4f, 4f, 10.5f, 10.5f), 1.8f, 1.8f, Path.Direction.CW)

@@ -166,6 +166,8 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         else if (key in Keys.ENGINE_KEYS) session.bridge.applySettings(settings())
         // Tắt lịch sử clipboard trong app: bỏ bản RAM (app đã xoá file).
         else if (key == Keys.CLIPBOARD_HISTORY) syncClipHistory(settings().clipboardHistory)
+        // Bật/tắt thả nổi trong app khi bàn phím đang mở (ô Thử gõ) → áp ngay.
+        else if (key == Keys.FLOATING_KEYBOARD && inputShown) applyFloating(settings().floatingKeyboard)
     }
 
     override fun onCreate() {
@@ -265,7 +267,8 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     @Suppress("DEPRECATION")
     private fun styleWindow(th: ImeTheme, v: View) {
         val w = window?.window ?: return
-        if (Build.VERSION.SDK_INT < 35) w.navigationBarColor = th.bg
+        // Thả nổi: dải nav bar trong suốt (app bên dưới lộ ra, khung không dính đáy).
+        if (Build.VERSION.SDK_INT < 35) w.navigationBarColor = if (floatingNow) android.graphics.Color.TRANSPARENT else th.bg
         if (Build.VERSION.SDK_INT >= 29) w.isNavigationBarContrastEnforced = false
         WindowInsetsControllerCompat(w, v).isAppearanceLightNavigationBars = !th.dark
     }
@@ -320,8 +323,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         val barOn = session.suggestionsActive
         st.configure(barOn, collapsed, settings.templatesEnabled,
             reserved = KeyLayout.stripReserved(settings.showSuggestions))
-        st.oneHandAvailable = !th.tablet
-        kb.setOneHand(if (th.tablet) OneHandSide.OFF else OneHandSide.fromPref(settings.oneHandMode))
+        applyFloating(settings.floatingKeyboard, settings)
         kb.setEditHasSelection(info.initialSelStart >= 0 && info.initialSelStart != info.initialSelEnd)
         st.setExtras(clipButton = settings.clipboardHistory, open = false)
         val templates = if (settings.templatesEnabled)
@@ -340,7 +342,6 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         if (!restarting || !voiceChecked) { voice.refresh(); voiceChecked = true }
         kb.setVoiceAvailable(voice.available && !field.isSecure)
         updateSwipeTyping()
-        root?.raisePx = ImeInsets.raisePx(settings.keyboardRaise, th.density)
         root?.refreshInsets()
         root?.requestLayout()
 
@@ -475,9 +476,64 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     override fun onComputeInsets(outInsets: InputMethodService.Insets) {
         super.onComputeInsets(outInsets)
+        val r = root
+        if (r != null && r.floating && !r.panel.isEmpty && r.isAttachedToWindow) {
+            // Thả nổi (#112, như Gboard): app không co (content/visible top = đáy cửa sổ), chỉ khung
+            // nhận chạm — ngoài khung chạm rơi xuống app.
+            val decorH = window?.window?.decorView?.height ?: 0
+            val top = FloatingKeyboard.contentTopInsets(decorH)
+            outInsets.contentTopInsets = top
+            outInsets.visibleTopInsets = top
+            r.getLocationInWindow(insetsLoc)
+            val p = r.panel
+            val g = FloatingKeyboard.touchRegion(insetsLoc[0], insetsLoc[1], p.left, p.top, p.right, p.bottom)
+            outInsets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION
+            outInsets.touchableRegion.set(g[0], g[1], g[2], g[3])
+            return
+        }
         // Toàn khung input view nhận touch — chạm vào khe không rơi sang app (§5).
         outInsets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_CONTENT
     }
+    private val insetsLoc = IntArray(2)
+
+    // MARK: thả nổi (#112)
+
+    /** Thả nổi đang áp ở input view hiện tại. */
+    private val floatingNow: Boolean get() = root?.floating == true
+
+    /**
+     * Áp chế độ thả nổi lên view hiện tại: vị trí theo chiều màn hình (prefs trạng thái), một tay
+     * tắt (menu ✋ ẩn), "Nâng bàn phím" bỏ qua. Tắt ⇒ y như cũ (một tay + nâng theo cài đặt).
+     */
+    private fun applyFloating(on: Boolean, settings: KeyboardSettings = settings()) {
+        val r = root ?: return
+        val th = theme ?: return
+        val kb = keyboard ?: return
+        val st = strip ?: return
+        if (on) {
+            val (fx, fy) = FloatingKeyboard.load(th.landscape) { stateStore().getString(it, null) }
+            r.onFloatMoved = { x, y -> FloatingKeyboard.save(th.landscape, x, y) { k, v -> stateStore().edit().putString(k, v).apply() } }
+            r.onFloatExit = { setFloatingPref(false) }
+            r.setFloating(true, fx, fy)
+            r.raisePx = 0
+        } else {
+            r.setFloating(false)
+            r.onFloatMoved = null; r.onFloatExit = null
+            r.raisePx = ImeInsets.raisePx(settings.keyboardRaise, th.density)
+        }
+        kb.floatingOn = on
+        st.oneHandAvailable = !th.tablet && !on
+        kb.setOneHand(if (th.tablet || on) OneHandSide.OFF else OneHandSide.fromPref(settings.oneHandMode))
+        styleWindow(th, r)
+    }
+
+    /** Ghi công tắc (app + sao lưu thấy) rồi áp ngay. */
+    private fun setFloatingPref(on: Boolean) {
+        prefs.edit().putBoolean(Keys.FLOATING_KEYBOARD, on).apply()
+        applyFloating(on)
+    }
+
+    override fun onToggleFloating() = setFloatingPref(!floatingNow)
 
     override fun onUpdateSelection(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int,
                                    candidatesStart: Int, candidatesEnd: Int) {
@@ -1106,6 +1162,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         val e = prefs.edit().putString(Keys.ONE_HAND_MODE, side.pref)
         if (side != OneHandSide.OFF) e.putString(Keys.ONE_HAND_LAST, side.pref)
         e.apply()
+        if (floatingNow) return             // một tay tắt khi thả nổi (lưu lại, áp khi gắn lại)
         keyboard?.setOneHand(side)
     }
 

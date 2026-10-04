@@ -57,16 +57,32 @@ class KeyMenusTests {
     }
 
     @Test fun emojiMenuActions() {
-        assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.VOICE, EmojiKeyAction.ONE_HAND, EmojiKeyAction.SETTINGS),
-            EmojiKeyMenu.actions(voiceAvailable = true, oneHandAvailable = true))
+        assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.VOICE, EmojiKeyAction.ONE_HAND,
+            EmojiKeyAction.FLOATING, EmojiKeyAction.SETTINGS),
+            EmojiKeyMenu.actions(voiceAvailable = true, oneHandAvailable = true, floatingAvailable = true))
         assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.ONE_HAND, EmojiKeyAction.SETTINGS),
-            EmojiKeyMenu.actions(voiceAvailable = false, oneHandAvailable = true))
-        // Tablet: không một tay.
-        assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.SETTINGS),
-            EmojiKeyMenu.actions(voiceAvailable = false, oneHandAvailable = false))
+            EmojiKeyMenu.actions(voiceAvailable = false, oneHandAvailable = true, floatingAvailable = false))
+        // Tablet: không một tay (thả nổi vẫn có).
+        assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.FLOATING, EmojiKeyAction.SETTINGS),
+            EmojiKeyMenu.actions(voiceAvailable = false, oneHandAvailable = false, floatingAvailable = true))
         // Đổi bàn phím luôn đầu và chọn sẵn (nhả tại chỗ = hành vi giữ 😊 cũ).
-        for (v in listOf(true, false)) for (o in listOf(true, false))
-            assertEquals(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyMenu.actions(v, o)[EmojiKeyMenu.PRESELECT])
+        for (v in listOf(true, false)) for (o in listOf(true, false)) for (f in listOf(true, false))
+            assertEquals(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyMenu.actions(v, o, f)[EmojiKeyMenu.PRESELECT])
+    }
+
+    /** #112: mục 🪟 có mặt, ngay trước ⚙; nhãn đổi theo trạng thái (thả nổi ↔ gắn lại). */
+    @Test fun floatingMenuItemToggles() {
+        // Đang nổi: IME tắt một tay ⇒ menu không có ✋ nhưng có 🪟 (để gắn lại).
+        val floatingActs = EmojiKeyMenu.actions(voiceAvailable = true, oneHandAvailable = false, floatingAvailable = true)
+        assertTrue(EmojiKeyAction.FLOATING in floatingActs)
+        assertFalse(EmojiKeyAction.ONE_HAND in floatingActs)
+        assertEquals(EmojiKeyAction.SETTINGS, floatingActs.last())
+        assertEquals(floatingActs.size - 2, floatingActs.indexOf(EmojiKeyAction.FLOATING))
+        assertEquals("Thả nổi bàn phím", EmojiKeyMenu.label(EmojiKeyAction.FLOATING, false, floatingOn = false))
+        assertEquals("Gắn bàn phím xuống đáy", EmojiKeyMenu.label(EmojiKeyAction.FLOATING, false, floatingOn = true))
+        L10n.lang = "en"
+        assertEquals("Float keyboard", EmojiKeyMenu.label(EmojiKeyAction.FLOATING, false, floatingOn = false))
+        assertEquals("Dock keyboard", EmojiKeyMenu.label(EmojiKeyAction.FLOATING, false, floatingOn = true))
     }
 
     @Test fun oneHandLabelFollowsState() {
@@ -80,7 +96,7 @@ class KeyMenusTests {
 
     @Test fun emojiMenuOpensWithoutCommitQueue() {
         // Menu hành động: không chèn chữ; nhấc tại chỗ = mục đầu, trượt sang = mục kế, trượt xa = huỷ.
-        val acts = EmojiKeyMenu.actions(voiceAvailable = true, oneHandAvailable = true)
+        val acts = EmojiKeyMenu.actions(voiceAvailable = true, oneHandAvailable = true, floatingAvailable = true)
         val l = DomainPopup.layout(200f, 48f, acts.size, 390f)
         val hold = DomainPopup.Hold(acts.map { EmojiKeyMenu.label(it, false) })
         assertTrue(hold.open(l, 0f, 100f, 200f, 80f))

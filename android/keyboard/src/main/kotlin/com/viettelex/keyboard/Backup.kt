@@ -57,6 +57,7 @@ object BackupSettings {
         Spec(Keys.ROW_HEIGHT_ADJUST, SettingKind.IntRange(0, -10..10)),
         Spec(Keys.SHOW_PERIOD_KEY, SettingKind.Bool(false)),
         Spec(Keys.KEYBOARD_RAISE, SettingKind.IntRange(0, 0..KeyboardSettings.KEYBOARD_RAISE_MAX)),
+        Spec(Keys.FLOATING_KEYBOARD, SettingKind.Bool(false)),
         Spec(Keys.SHORTCUTS_ENABLED, SettingKind.Bool(true)),
         Spec(Keys.ADD_TONES_CHIP, SettingKind.Bool(false)),
         Spec(Keys.NUMBER_CHIPS, SettingKind.Bool(true)),
