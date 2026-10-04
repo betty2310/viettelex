@@ -60,6 +60,12 @@
     "spaceSwipeLanguage" : false,
     "swipeEnglish" : true,
     "swipeTyping" : true,
+    "systemBackdropContrast" : false,
+    "systemBackdropLavender" : false,
+    "systemBackdropMint" : false,
+    "systemBackdropOled" : false,
+    "systemBackdropPeach" : false,
+    "systemBackdropSky" : false,
     "teencode" : false,
     "templatesEnabled" : true,
     "uiLanguage" : "en"

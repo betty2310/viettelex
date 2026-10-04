@@ -80,6 +80,17 @@ struct ThemeSettingsView: View {
                     }
                 }
                 .padding(.vertical, 6)
+                if settings.theme.hasOwnBackground {
+                    Toggle(isOn: systemBackdropBinding) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("Nền theo hệ thống"))
+                            Text(L("Giữ màu phím của theme, nền dùng lớp kính bàn phím của iOS — liền màu với dải 🌐 🎤 bên dưới."))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    .tint(.green)
+                    .disabled(settings.wallpaperActive(fileExists: hasWallpaperFile))
+                }
             } header: { Text("Theme") }
 
             Section {
@@ -218,6 +229,16 @@ struct ThemeSettingsView: View {
 
     private func binding(_ kp: WritableKeyPath<ThemeSettings, Bool>) -> Binding<Bool> {
         Binding(get: { settings[keyPath: kp] }, set: { settings[keyPath: kp] = $0; save() })
+    }
+
+    /// "Nền theo hệ thống" của RIÊNG theme đang chọn.
+    private var systemBackdropBinding: Binding<Bool> {
+        Binding(get: { settings.systemBackdropThemes.contains(settings.theme) },
+                set: { on in
+                    if on { settings.systemBackdropThemes.insert(settings.theme) }
+                    else { settings.systemBackdropThemes.remove(settings.theme) }
+                    save()
+                })
     }
 
     private func save() { settings.save(groupDefaults) }

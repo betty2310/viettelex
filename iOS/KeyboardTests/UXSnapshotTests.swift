@@ -93,6 +93,22 @@ final class UXSnapshotTests: XCTestCase {
         let keys = [ThemeSettings.themeKey, KeyboardTransparency.keyboardKey, KeyboardTransparency.labelKey]
         let saved = keys.map { d?.object(forKey: $0) }
         defer { for (k, v) in zip(keys, saved) { d?.set(v, forKey: k) } }
+        // Theme đen (OLED): nền phủ trọn + bo góc trên; "Nền theo hệ thống" bật/tắt.
+        let sbKey = try XCTUnwrap(KeyboardTheme.oled.systemBackdropKey)
+        let sbSaved = d?.object(forKey: sbKey)
+        defer { d?.set(sbSaved, forKey: sbKey) }
+        for sysBg in [false, true] {
+            for dark in [true, false] {
+                d?.set(KeyboardTheme.oled.rawValue, forKey: ThemeSettings.themeKey)
+                d?.set(0, forKey: KeyboardTransparency.keyboardKey)
+                d?.set(0, forKey: KeyboardTransparency.labelKey)
+                d?.set(sysBg, forKey: sbKey)
+                try shot("oled\(sysBg ? "-sysbg" : "")-\(dark ? "dark" : "light")", dark: dark) { kb in
+                    kb.showSuggestions(.init(nextWords: ["Em", "Anh", "Tôi"]))
+                }
+            }
+        }
+        d?.set(false, forKey: sbKey)
         for theme in [KeyboardTheme.system, .peach] {
             for dark in [true, false] {
                 for (k, l) in [(0, 0), (50, 0), (100, 0), (0, 50), (0, 100), (50, 50)] {

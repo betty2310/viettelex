@@ -342,6 +342,9 @@ enum L10n {
         "Đổi ảnh nền": "Change wallpaper",
         "Chọn ảnh nền từ Thư viện": "Choose wallpaper from Photos",
         "Dùng ảnh nền": "Use wallpaper",
+        "Nền theo hệ thống": "System background",
+        "Giữ màu phím của theme, nền dùng lớp kính bàn phím của iOS — liền màu với dải 🌐 🎤 bên dưới.":
+            "Keeps the theme's key colors; the background uses the iOS keyboard glass — seamless with the 🌐 🎤 bar below.",
         "Độ tối lớp phủ: %@%": "Overlay darkness: %@%",
         "Độ mờ ảnh: %@": "Blur: %@",
         "Xoá ảnh nền": "Remove wallpaper",

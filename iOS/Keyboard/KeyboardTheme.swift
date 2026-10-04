@@ -63,7 +63,21 @@ struct KeyboardPalette: Equatable {
     /// Hệ số alpha cho ảnh nền + lớp phủ + bóng phím (1 = như cũ).
     var surfaceAlpha: Double = 1
 
+    /// Nền phía sau phần KHÔNG phải phím (thanh gợi ý, bảng emoji, ô tìm emoji) tối hay sáng;
+    /// nil = `isDark`. Khác `isDark` khi theme tự vẽ phím nhưng nền theo hệ thống.
+    var surfaceDark: Bool? = nil
+
     var keyInk: RGBA { keyLabel ?? ink }
+
+    /// "Nền theo hệ thống": bỏ nền theme (vật liệu bàn phím hệ thống lộ ra, cùng màu dải
+    /// 🌐/🎤), GIỮ màu phím. Chữ thanh gợi ý đổi đen/trắng nếu không đọc được trên nền đó.
+    func onSystemBackdrop(systemDark: Bool) -> KeyboardPalette {
+        var p = self
+        p.background = nil
+        p.barInk = KeyboardTransparency.readable(barInk, on: KeyboardTransparency.systemBackdrop(dark: systemDark))
+        p.surfaceDark = systemDark
+        return p
+    }
 
     /// Có ảnh nền: phím hơi trong để ảnh lộ ra; lớp phủ (dim) do view vẽ riêng.
     /// Độ trong được chọn sao cho chữ vẫn ≥ 4.5:1 (WCAG AA) kể cả trên ảnh TỆ NHẤT
@@ -163,6 +177,17 @@ enum KeyboardTheme: String, CaseIterable {
         case .lavender: return L("Oải hương")
         case .glass: return L("Kính")
         }
+    }
+
+    /// Theme tự vẽ nền (OLED, tương phản cao, pastel) — có tuỳ chọn "Nền theo hệ thống".
+    /// Hệ thống / Kính vốn trong suốt.
+    var hasOwnBackground: Bool { palette(systemDark: false).background != nil }
+
+    /// Key App Group + sao lưu của "Nền theo hệ thống" cho theme này ("systemBackdropOled"…);
+    /// nil = theme vốn trong suốt (không có tuỳ chọn).
+    var systemBackdropKey: String? {
+        guard hasOwnBackground else { return nil }
+        return "systemBackdrop" + rawValue.prefix(1).uppercased() + rawValue.dropFirst()
     }
 
     /// Theme cao cấp thuộc gói Plus. Tương phản cao là trợ năng → luôn miễn phí.
@@ -277,6 +302,8 @@ struct ThemeSettings: Equatable {
     /// Độ trong suốt phím / ký tự 0…100 (miễn phí, mọi theme).
     var keyboardTransparency = 0
     var labelTransparency = 0
+    /// Theme bật "Nền theo hệ thống" (tuỳ chọn RIÊNG từng theme có nền; mặc định không theme nào).
+    var systemBackdropThemes: Set<KeyboardTheme> = []
 
     /// "Khôi phục giao diện gốc": mọi chỉnh ở màn Giao diện về mặc định. Ảnh nền chỉ
     /// bỏ chọn (file giữ nguyên để bật lại); version giữ nguyên (không vứt cache vô cớ).
@@ -299,6 +326,9 @@ struct ThemeSettings: Equatable {
         s.crop = WallpaperCrop(serialized: d.string(forKey: cropKey))
         s.keyboardTransparency = KeyboardTransparency.clamp(d.integer(forKey: KeyboardTransparency.keyboardKey))
         s.labelTransparency = KeyboardTransparency.clamp(d.integer(forKey: KeyboardTransparency.labelKey))
+        for t in KeyboardTheme.allCases {
+            if let k = t.systemBackdropKey, d.bool(forKey: k) { s.systemBackdropThemes.insert(t) }
+        }
         return s
     }
 
@@ -311,6 +341,9 @@ struct ThemeSettings: Equatable {
         if let crop { d?.set(crop.serialized, forKey: Self.cropKey) } else { d?.removeObject(forKey: Self.cropKey) }
         d?.set(keyboardTransparency, forKey: KeyboardTransparency.keyboardKey)
         d?.set(labelTransparency, forKey: KeyboardTransparency.labelKey)
+        for t in KeyboardTheme.allCases {
+            if let k = t.systemBackdropKey { d?.set(systemBackdropThemes.contains(t), forKey: k) }
+        }
     }
 
     /// Theme thực dùng sau cổng Plus (hết quyền → về Hệ thống, không crash/không trắng).
@@ -329,8 +362,15 @@ struct ThemeSettings: Equatable {
         !wallpaperActive && palette(systemDark: systemDark, wallpaperActive: false).background == nil
     }
 
+    /// "Nền theo hệ thống" đang áp: theme có nền riêng + người dùng bật cho theme đó.
+    /// Mặc định TẮT ⇒ 0 chi phí, như trước.
+    var usesSystemBackdrop: Bool {
+        effectiveTheme.hasOwnBackground && systemBackdropThemes.contains(effectiveTheme)
+    }
+
     func palette(systemDark: Bool, wallpaperActive: Bool) -> KeyboardPalette {
-        let p = effectiveTheme.palette(systemDark: systemDark)
+        var p = effectiveTheme.palette(systemDark: systemDark)
+        if usesSystemBackdrop, !wallpaperActive { p = p.onSystemBackdrop(systemDark: systemDark) }
         return (wallpaperActive ? p.overWallpaper() : p)
             .withTransparency(keyboard: keyboardTransparency, labels: labelTransparency,
                               systemDark: systemDark, wallpaper: wallpaperActive)

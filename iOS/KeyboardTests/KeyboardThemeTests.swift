@@ -35,6 +35,96 @@ final class KeyboardBackdropTests: XCTestCase {
         XCTAssertFalse(s.clearBackground(systemDark: true, wallpaperActive: true))
     }
 
+    // MARK: "Nền theo hệ thống" (tuỳ chọn từng theme có nền, mặc định tắt)
+
+    func testSystemBackdropOptionPerThemeDefaultOff() {
+        var s = ThemeSettings()
+        XCTAssertTrue(s.systemBackdropThemes.isEmpty)
+        XCTAssertNil(KeyboardTheme.system.systemBackdropKey)
+        XCTAssertNil(KeyboardTheme.glass.systemBackdropKey)
+        XCTAssertEqual(KeyboardTheme.oled.systemBackdropKey, "systemBackdropOled")
+        s.theme = .oled
+        XCTAssertFalse(s.usesSystemBackdrop)
+        let own = s.palette(systemDark: true, wallpaperActive: false)
+        s.systemBackdropThemes = [.oled]
+        XCTAssertTrue(s.usesSystemBackdrop)
+        let sys = s.palette(systemDark: true, wallpaperActive: false)
+        XCTAssertNil(sys.background)
+        XCTAssertTrue(s.clearBackground(systemDark: true, wallpaperActive: false))
+        XCTAssertEqual(sys.keyFill, own.keyFill)          // giữ màu phím theme
+        XCTAssertEqual(sys.ink, own.ink)
+        // Bật cho OLED không ảnh hưởng theme khác.
+        s.theme = .contrast
+        XCTAssertFalse(s.usesSystemBackdrop)
+        XCTAssertNotNil(s.palette(systemDark: true, wallpaperActive: false).background)
+        // Ảnh nền thắng (ảnh nền tự vẽ nền).
+        s.theme = .oled
+        XCTAssertFalse(s.clearBackground(systemDark: true, wallpaperActive: true))
+        // Khôi phục giao diện gốc tắt hết.
+        XCTAssertTrue(s.resetToDefaults().systemBackdropThemes.isEmpty)
+    }
+
+    func testSystemBackdropKeepsBarReadableAndSurfaceFollowsSystem() {
+        var s = ThemeSettings()
+        s.theme = .oled                                   // chữ trắng, theme tối cố định
+        s.systemBackdropThemes = [.oled]
+        let light = s.palette(systemDark: false, wallpaperActive: false)   // kính sáng phía sau
+        let behind = KeyboardTransparency.systemBackdrop(dark: false)
+        XCTAssertGreaterThanOrEqual(RGBA.contrast(light.barInk, behind), KeyboardTransparency.minLabelContrast)
+        XCTAssertEqual(light.surfaceDark, false)          // bảng emoji theo nền sáng
+        XCTAssertTrue(light.isDark)                       // phím vẫn tối
+        XCTAssertEqual(s.palette(systemDark: true, wallpaperActive: false).surfaceDark, true)
+    }
+
+    func testSystemBackdropSettingRoundTripsAndIsBackedUp() throws {
+        let d = try XCTUnwrap(UserDefaults(suiteName: "sysbd-\(UUID().uuidString)"))
+        var s = ThemeSettings()
+        s.systemBackdropThemes = [.oled, .peach]
+        s.save(d)
+        XCTAssertEqual(ThemeSettings.load(d).systemBackdropThemes, [.oled, .peach])
+        for t in KeyboardTheme.allCases {
+            guard let k = t.systemBackdropKey else { continue }
+            XCTAssertEqual(BackupSettings.byKey[k]?.kind, .bool(false), k)   // có trong sao lưu, mặc định tắt
+        }
+    }
+
+    // MARK: nền phủ trọn input view + bo góc
+
+    /// Nền theme phủ TRỌN view (headroom balloon, strip, host cấp dư/thiếu, bar bật/tắt/thu
+    /// gọn) — không để lộ khung kính xám của hệ thống ở mép trên (Phil 05/10, theme đen).
+    @MainActor func testBackdropCoversWholeInputView() throws {
+        let d = UserDefaultsProvider.shared
+        let saved = d?.object(forKey: ThemeSettings.themeKey)
+        defer { d?.set(saved, forKey: ThemeSettings.themeKey) }
+        d?.set(KeyboardTheme.oled.rawValue, forKey: ThemeSettings.themeKey)
+        let w: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 834 : 390
+        for (suggestions, reserve) in [(true, true), (false, true), (false, false)] {
+            let kb = KeyboardView(needsGlobe: false, inputController: nil) { _ in }
+            let host = UIView(frame: CGRect(x: 0, y: 0, width: w, height: 500))
+            host.addSubview(kb)
+            kb.frame = CGRect(x: 0, y: 0, width: w, height: 300)
+            kb.applyAppearance(.dark, style: .dark)
+            kb.configureInputKind(.normal)
+            kb.setSuggestionsEnabled(suggestions, reserveStrip: reserve)
+            kb.layoutIfNeeded()
+            let want = kb.debugRequestedHeight
+            for h in [want, want - 14, want - 40, want + 30, want + 120] {   // đúng / thiếu / dư
+                kb.frame.size.height = h
+                kb.setNeedsLayout(); kb.layoutIfNeeded()
+                for f in kb.debugBackdrop.frames {
+                    XCTAssertEqual(f, kb.bounds, "bar \(suggestions)/\(reserve) h \(h)")
+                }
+            }
+        }
+    }
+
+    func testBackdropCornerRadiusOnlyPhoneIOS26() {
+        XCTAssertGreaterThan(KeyLayout.backdropCornerRadius(phone: true, systemMajor: 26), 0)
+        XCTAssertGreaterThan(KeyLayout.backdropCornerRadius(phone: true, systemMajor: 27), 0)
+        XCTAssertEqual(KeyLayout.backdropCornerRadius(phone: true, systemMajor: 18), 0)
+        XCTAssertEqual(KeyLayout.backdropCornerRadius(phone: false, systemMajor: 27), 0)
+    }
+
     func testSystemKeysKeepContrastOnSystemBackdrop() {
         // Nền trong ⇒ phím nằm trên vật liệu hệ thống: chữ vẫn ≥ 4.5:1, phím tách khỏi nền.
         for dark in [false, true] {

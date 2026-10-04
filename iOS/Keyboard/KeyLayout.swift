@@ -56,6 +56,15 @@ enum KeyLayout {
     /// (strip nhường hết) ⇒ balloon "3" trên phím "e" bị cắt nửa ở mép trên. Stock cũng
     /// chừa đệm trên. 20pt + khe hàng 10 ⇒ bubble ≥ 24pt (chữ co cho vừa, không cắt).
     static let balloonHeadroom: CGFloat = 20
+
+    /// Bo 2 góc trên của nền theme tự vẽ (OLED, pastel, ảnh nền) theo khung kính bàn phím
+    /// iPhone iOS 26+: khung hệ thống bo góc trên ĐÚNG ở mép trên cửa sổ extension, nền đục
+    /// góc vuông che mất ⇒ góc đen vuông lòi trên nền app. Đo Safari iOS 27 sim (iPhone 17,
+    /// 05/10/2026): profile góc khớp cung TRÒN bán kính 25pt (75px @3x) — cornerCurve .circular.
+    /// iPad / iOS < 26: 0 (chưa đo — giữ góc vuông như cũ).
+    static func backdropCornerRadius(phone: Bool, systemMajor: Int) -> CGFloat {
+        phone && systemMajor >= 26 ? 25 : 0
+    }
     /// Hàng ô tìm emoji (ô 38pt + đệm 5/3) — như dải tìm của stock.
     static let emojiSearchRow: CGFloat = 46
     static func emojiSearchBarHeight(strip: CGFloat) -> CGFloat { max(emojiSearchRow, strip) }

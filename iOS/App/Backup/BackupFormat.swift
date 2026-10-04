@@ -71,6 +71,13 @@ enum BackupSettings {
         Spec(key: "autoSpaceAfterPunct", kind: .bool(false)),
         Spec(key: "keyboardTransparency", kind: .int(0, 0...100)),
         Spec(key: "keyLabelTransparency", kind: .int(0, 0...100)),
+        // "Nền theo hệ thống" từng theme có nền riêng (chỉ iOS dùng) — systemBackdropOled…
+        Spec(key: "systemBackdropOled", kind: .bool(false)),
+        Spec(key: "systemBackdropContrast", kind: .bool(false)),
+        Spec(key: "systemBackdropPeach", kind: .bool(false)),
+        Spec(key: "systemBackdropMint", kind: .bool(false)),
+        Spec(key: "systemBackdropSky", kind: .bool(false)),
+        Spec(key: "systemBackdropLavender", kind: .bool(false)),
         // Ngôn ngữ giao diện app (L10n) — mặc định "vi", không theo máy.
         Spec(key: "uiLanguage", kind: .string("vi", ["vi", "en"])),
     ]

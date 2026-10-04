@@ -667,6 +667,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         layoutSuggestionBar()
         layoutStripZones()
         layoutOverlayPanel()
+        layoutBackdrop()
         loadWallpaperIfNeeded()
         logGeometryIfChanged()
         if pasteCard.superview != nil, !pasteCard.isHidden {   // xoay màn hình
@@ -1302,6 +1303,15 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let clear = themeSettings.clearBackground(systemDark: systemDark, wallpaperActive: wallpaperActive)
         themeBackdrop.backgroundColor = clear ? nil : palette.background?.ui
         themeBackdrop.isHidden = clear || palette.background == nil
+        // Nền tự vẽ: bo 2 góc trên theo khung kính bàn phím iOS 26+ (không còn góc vuông đen
+        // chồng lên góc bo xám của hệ thống). cornerRadius trên view lá màu phẳng / ảnh ⇒ không
+        // offscreen pass.
+        let r = clear ? 0 : KeyLayout.backdropCornerRadius(phone: !Self.isPad, systemMajor: Self.systemMajor)
+        for v in [themeBackdrop, wallpaperView, wallpaperDim] where v.layer.cornerRadius != r {
+            v.layer.cornerRadius = r
+            v.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+            v.layer.cornerCurve = .circular   // khớp khung hệ thống (đo pixel, KeyLayout)
+        }
         wallpaperView.isHidden = !wallpaperActive
         // Độ trong suốt phím: alpha của một UIImageView lá (không sublayer) → không offscreen.
         wallpaperView.alpha = CGFloat(palette.surfaceAlpha)
@@ -1316,6 +1326,23 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             setNeedsLayout()
         }
     }
+
+    private static let systemMajor = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+
+    /// Nền theme / ảnh nền / lớp phủ phủ TRỌN view (= cả input view: strip, headroom balloon,
+    /// phần host cấp dư hoặc thiếu) — đặt frame tường minh mỗi lượt layout, không dựa
+    /// autoresizing từ frame lúc chèn (có thể là .zero).
+    private func layoutBackdrop() {
+        for v in [themeBackdrop, wallpaperView, wallpaperDim] where v.superview === self && v.frame != bounds {
+            v.frame = bounds
+        }
+    }
+    #if DEBUG
+    /// Test: frame nền theme / ảnh nền / lớp phủ + bán kính bo.
+    var debugBackdrop: (frames: [CGRect], radius: CGFloat) {
+        ([themeBackdrop.frame, wallpaperView.frame, wallpaperDim.frame], themeBackdrop.layer.cornerRadius)
+    }
+    #endif
 
     /// Giải ảnh nền ở đúng cỡ view, ngoài main thread (ImageIO thumbnail).
     private func loadWallpaperIfNeeded() {
@@ -2082,7 +2109,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
 
     private func buildEmoji() {
         rowsContainer.distribution = .fill
-        let plane = EmojiPlane(dark: dark, abcSlot: emojiABCSlot)
+        let plane = EmojiPlane(dark: palette.surfaceDark ?? dark, abcSlot: emojiABCSlot)
         plane.onEmoji = { [weak self] e in self?.tapped(.text(e)) }
         plane.onABC = { [weak self] in
             guard let self else { return }
@@ -2112,7 +2139,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private weak var searchBarHeight: NSLayoutConstraint?
 
     private func buildEmojiSearch() {
-        let bar = EmojiSearchBar(dark: dark)
+        let bar = EmojiSearchBar(dark: palette.surfaceDark ?? dark)
         bar.onPick = { [weak self] e in
             Self.clickLetter()
             EmojiPlane.noteUsed(e)
