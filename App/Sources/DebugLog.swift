@@ -19,7 +19,11 @@ enum DebugLog {
     // (field report 2026-07-30). 2000 lines ≈ 3 min of continuous typing, ~160KB
     // worst case, only while debug logging is enabled.
     private static let capacity = 2000
+    /// True ring: `head` = next slot to overwrite once full. The old Array +
+    /// `removeFirst` shifted all 2000 entries on EVERY line at capacity (~2 per
+    /// keystroke while logging is on) — a memmove + retain churn on the tap thread.
     private static var lines: [String] = []
+    private static var head = 0
     private static let lock = NSLock()          // tap callback is main; Spotlight scan is off-main
     private static let startNs = DispatchTime.now().uptimeNanoseconds
 
@@ -31,8 +35,13 @@ enum DebugLog {
         let text = message()
         let line = String(format: "%10.1f  %@", ms, text)
         lock.lock()
-        lines.append(line)
-        if lines.count > capacity { lines.removeFirst(lines.count - capacity) }
+        if lines.count < capacity {
+            if lines.isEmpty { lines.reserveCapacity(capacity) }
+            lines.append(line)
+        } else {
+            lines[head] = line
+            head = (head + 1) % capacity
+        }
         lock.unlock()
         // Mirror to the unified log: the in-memory ring DIES with the process, which
         // is exactly when it is needed most (hang → reboot / relaunch wiped the
@@ -41,11 +50,12 @@ enum DebugLog {
         Signposts.log.notice("\(text, privacy: .public)")
     }
 
-    static func clear() { lock.lock(); lines.removeAll(); lock.unlock() }
+    static func clear() { lock.lock(); lines = []; head = 0; lock.unlock() }
 
     /// `header` (current runtime state) followed by the ring buffer, ready to copy.
     static func snapshot(header: [String]) -> String {
-        lock.lock(); let body = lines; lock.unlock()
+        lock.lock(); let ring = lines, h = head; lock.unlock()
+        let body = Array(ring[h...] + ring[..<h])      // oldest first
         // Log payload strings are ENGLISH on purpose (not VTLocalized): they end up
         // pasted into bug reports, where greppability beats localization.
         let tail = body.isEmpty

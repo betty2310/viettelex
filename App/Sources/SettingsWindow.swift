@@ -30,27 +30,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if tab == .modeTable || tab == .experimental, !AppState.shared.advancedFeatures {
             AppState.shared.advancedFeatures = true       // trước khi model đọc (init fallback về .general)
         }
-        if window == nil {
-            let model = SettingsModel(selected: tab)
-            let root = SettingsView().environmentObject(model)
-            let hosting = NSHostingController(rootView: root)
-            let win = NSWindow(contentViewController: hosting)
-            win.title = VTLocalized("VietTelex — Settings")
-            win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            // 660, not the old 560: the About tab has no scroll container, and at 560 its
-            // fixed content (icon + links + update block + copyright) already consumed the
-            // full height once padding and the tab bar came out. The changelog box added
-            // there is the only compressible child, so it absorbed the whole deficit and
-            // collapsed to a sliver. Height is a first-creation default — users who resized
-            // keep their own frame.
-            win.setContentSize(NSSize(width: 680, height: 660))
-            win.contentMinSize = NSSize(width: 640, height: 500)
-            win.delegate = self
-            win.isReleasedWhenClosed = false
-            win.center() // only on first creation — later shows keep the user's position
-            self.window = win
-            self.model = model
-        }
+        buildWindowIfNeeded(tab: tab)
         if model?.hideAdvanced == true, tab == .modeTable || tab == .experimental {
             model?.hideAdvanced = false
         }
@@ -76,6 +56,35 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             }
         }
     }
+
+    /// Creates the hosting window + model (not shown, no activation). `show` calls it;
+    /// tests call it directly to render the SwiftUI graph without stealing focus.
+    func buildWindowIfNeeded(tab: SettingsTab) {
+        guard window == nil else { return }
+        let model = SettingsModel(selected: tab)
+        let root = SettingsView().environmentObject(model)
+        let hosting = NSHostingController(rootView: root)
+        let win = NSWindow(contentViewController: hosting)
+        win.title = VTLocalized("VietTelex — Settings")
+        win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        // 660, not the old 560: the About tab has no scroll container, and at 560 its
+        // fixed content (icon + links + update block + copyright) already consumed the
+        // full height once padding and the tab bar came out. The changelog box added
+        // there is the only compressible child, so it absorbed the whole deficit and
+        // collapsed to a sliver. Height is a first-creation default — users who resized
+        // keep their own frame.
+        win.setContentSize(NSSize(width: 680, height: 660))
+        win.contentMinSize = NSSize(width: 640, height: 500)
+        win.delegate = self
+        win.isReleasedWhenClosed = false
+        win.center() // only on first creation — later shows keep the user's position
+        self.window = win
+        self.model = model
+    }
+
+    /// The live Settings window, if any (tests: deallocation on close).
+    var currentWindow: NSWindow? { window }
+    var currentModel: SettingsModel? { model }
 
     func windowWillClose(_ notification: Notification) {
         // Tear the SwiftUI hosting graph off the window EXPLICITLY (issue #59,
@@ -105,9 +114,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // autolayout constraints — measured ~20 MB), but malloc keeps those pages on
         // its own free lists, so an input method that lives for the whole login session
         // showed a permanent high-water mark in Activity Monitor after the user opened
-        // Settings ONCE (peak 159 MB → resident 68 MB, audit 17/08/2026). Deferred one
-        // runloop hop so the teardown that AppKit still has queued finishes first.
-        DispatchQueue.main.async { malloc_zone_pressure_relief(nil, 0) }
+        // Settings ONCE (peak 159 MB → resident 68 MB, audit 17/08/2026). Several
+        // passes, not one hop later: the graph keeps freeing for seconds after close
+        // (see MemoryFootprint.relieveAfterTransientPeak for the numbers).
+        MemoryFootprint.relieveAfterTransientPeak()
     }
 }
 
@@ -1158,11 +1168,15 @@ enum DebugHeader {
         let fallback = s.learnedFallbackApps
         let manual = s.manualModes.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
         let os = ProcessInfo.processInfo.operatingSystemVersion
+        let mem = MemoryFootprint.sample()
         return [
             "VietTelex debug log — v\(version) (build \(build))",
             "macOS: \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
             "accessibility: \(Accessibility.isTrusted ? "granted" : "MISSING")",
             "tap running: \(TerminalTapController.shared.isRunning)",
+            // Activity Monitor's "Memory" for this process + its high-water mark: a large
+            // gap = a transient peak (Settings) whose pages malloc still holds.
+            "memory: \(MemoryFootprint.megabytes(mem.current)) (peak \(MemoryFootprint.megabytes(mem.peak)))",
             "current app: \(id ?? "?")  frontmost: \(frontID ?? "?")",
             "handling: \(mode)",
             "  usesTapMode(id)=\(s.usesTapMode(id)) usesTapMode(front)=\(s.usesTapMode(frontID))",

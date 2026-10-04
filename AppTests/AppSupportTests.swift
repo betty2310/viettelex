@@ -41,6 +41,20 @@ final class AppSupportTests: XCTestCase {
         XCTAssertTrue(DebugLog.snapshot(header: []).contains("log empty"))
     }
 
+    /// Ring wraps several times: snapshot stays oldest→newest, exactly `capacity` lines.
+    func testDebugLogRingOrderAfterWrapping() {
+        let wasOn = AppState.shared.debugLogging
+        defer { AppState.shared.debugLogging = wasOn; DebugLog.clear() }
+        AppState.shared.debugLogging = true
+        DebugLog.clear()
+        for i in 0..<4_321 { DebugLog.log("w \(i)") }
+        let nums: [Int] = DebugLog.snapshot(header: []).split(separator: "\n").compactMap { line in
+            guard let r = line.range(of: "  w ") else { return nil }
+            return Int(line[r.upperBound...])
+        }
+        XCTAssertEqual(nums, Array(2_321..<4_321))
+    }
+
     // MARK: Updater — pure logic
 
     func testVersionCompare() {
