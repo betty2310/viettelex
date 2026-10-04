@@ -35,7 +35,7 @@ object KeyKind {
     const val EMOJI = 7
     const val CLEAR = 8       // 🗑 plane mẫu câu
     const val SPACE = 9
-    const val PUNCT = 10      // , @ . / .com cạnh space: arm DOWN, chốt UP, không balloon
+    const val PUNCT = 10      // , @ . / cạnh space: arm DOWN, chốt UP, không balloon
     const val RETURN = 11
     const val DISMISS = 12    // tablet: ẩn bàn phím
     /** Phím bàn số (số / ký hiệu phụ): arm DOWN, chốt UP, không balloon, luôn literal. */
@@ -250,8 +250,9 @@ object KeyLayout {
 
     /**
      * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10]
-     * [enter 0.15][ẩn 0.07 tablet]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" và thêm ".com" 0.15
-     * trước ".". Hệ số nhân với bề ngang CẢ hàng.
+     * [enter 0.15][ẩn 0.07 tablet]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
+     * phím ".com" riêng — space rộng như stock, đuôi tên miền ở giữ "." — DomainPopup).
+     * Hệ số nhân với bề ngang CẢ hàng.
      */
     private fun bottomRow(out: MutableList<LaidKey>, c: LayoutConfig, rowTop: Float, rowH: Float,
                           planeKey: String, clearInsteadOfEmoji: Boolean) {
@@ -275,7 +276,6 @@ object KeyLayout {
         slots += if (clearInsteadOfEmoji) Slot(KeyKind.CLEAR, "", "", 0.10f)
                  else Slot(KeyKind.EMOJI, "", "", 0.10f)
         slots += Slot(KeyKind.SPACE, "", " ", -1f)
-        if (letters && c.kind == InputKind.URL) slots += Slot(KeyKind.PUNCT, ".com", ".com", 0.15f)
         slots += Slot(KeyKind.PUNCT, ".", ".", 0.10f)
         slots += Slot(KeyKind.RETURN, c.returnLabel, "\n", 0.15f)
         if (c.tablet) slots += Slot(KeyKind.DISMISS, "", "", 0.07f)

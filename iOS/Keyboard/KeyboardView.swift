@@ -1229,7 +1229,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
 
     /// Loại ô nhập (từ textDocumentProxy.keyboardType) → đổi layout như stock:
     /// number mở thẳng plane số; email đổi hàng đáy thành phím @ và . ; url
-    /// thành . / .com; search (thanh địa chỉ/tìm kiếm trình duyệt, .webSearch) đổi
+    /// thành . / (đuôi .com/.vn… ở giữ "."); search (thanh địa chỉ/tìm kiếm trình duyệt, .webSearch) đổi
     /// "," thành "." như stock. Chỉ ảnh hưởng hàng đáy plane CHỮ + plane mở đầu.
     enum InputKind {
         case normal, number, email, url, search
@@ -2309,7 +2309,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         space.setContentHuggingPriority(.defaultLow, for: .horizontal)
         views.append(space)
         // Nhóm phím dấu câu bên phải space. Bình thường là dấu phẩy; ô email/url
-        // đổi thành phím tắt như stock (@ . cho email; . / .com cho url). Chỉ áp
+        // đổi thành phím tắt như stock (@ . cho email; . / cho url). Chỉ áp
         // ở hàng đáy plane CHỮ (planeKey == "123").
         // iPad plane chữ / số / ký hiệu: hàng đáy kiểu stock (KeyLayout.padBottomRow).
         let padLetters = Self.isPad && planeKey == "123"
@@ -2325,7 +2325,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         } else if planeKey == "123" {
             switch inputKind {
             case .email: puncts = [("@", "@", 0.11), (".", ".", 0.09)]
-            case .url:   puncts = [(".", ".", 0.075), ("/", "/", 0.075), (".com", ".com", 0.17)]
+            // Ô URL (issue #113): không phím ".com" riêng — space rộng như stock; đuôi tên
+            // miền (.com .vn .com.vn …) ở giữ "." (DomainPopup). Giữ "/".
+            case .url:   puncts = [(".", ".", 0.075), ("/", "/", 0.075)]
             // Thanh địa chỉ: stock hiện "." thay "," (gõ tên miền); iPad đã có ".?" riêng.
             case .search: puncts = padLetters ? [] : [(".", ".", 0.075)]
             // iPad plane chữ: không phím "," riêng như stock ("!," hàng 3 đã có).
@@ -2338,15 +2340,14 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         for p in puncts {
             let b = baseButton(title: p.title, special: false)
             b.pressedBackground = specialFill
-            if p.title == ".com" { b.titleLabel?.font = .systemFont(ofSize: 17) }
-            else if Self.isPad { b.padRole = .digit }
+            if Self.isPad { b.padRole = .digit }
             armCommit(b) { [weak self] in self?.tapped(.text(p.insert)) }
             // Bàn chữ iPhone: giữ "," ra "." (KeyAlternates.commaHold — bảng ký tự phụ không
             // rỗng; VoiceOver đã rỗng sẵn; iPad có phím ",/." 2 tầng riêng).
             if !Self.isPad, p.title == ",", planeKey == "123", KeyAlternates.commaHold(alternates: activeAlts) {
                 armCommaHold(b)
             }
-            // Ô địa chỉ / URL: giữ "." (".com") ra hàng đuôi tên miền như stock (DomainPopup).
+            // Ô địa chỉ / URL / email: giữ "." ra hàng đuôi tên miền như stock (DomainPopup).
             let tlds = DomainPopup.choices(kind: inputKind, key: p.title, lettersPlane: planeKey == "123")
             if !tlds.isEmpty { armDomainHold(b, choices: tlds) }
             views.append(b)
@@ -3757,7 +3758,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var commaTimer: DispatchWorkItem?
     private var commaFired = false
 
-    // MARK: giữ "." / ".com" ⇒ popup đuôi tên miền (ô .search / .url, bàn chữ)
+    // MARK: giữ "." ⇒ popup đuôi tên miền (ô .search / .url / .email, bàn chữ)
 
     /// Hẹn giờ `holdDelay` như giữ ","; hết giờ mà phím còn chờ chốt ⇒ dựng popup (lần đầu
     /// mới tạo view), phím chờ chốt đổi thành "chèn đuôi đang chọn" — chốt lúc nhấc / khi ngón
@@ -4331,7 +4332,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         b.sendActions(for: .touchUpInside)
         return armed
     }
-    /// Test hook giữ phím "." / ".com" ô địa chỉ/URL: chạm tâm phím, (tuỳ) hết giờ giữ, trượt
+    /// Test hook giữ phím "." ô địa chỉ/URL/email: chạm tâm phím, (tuỳ) hết giờ giữ, trượt
     /// (dx, dy), (tuỳ) ngón khác chạm phím chữ, rồi nhấc — đường action thật. Trả có hẹn giờ không.
     @discardableResult
     func debugDomainHold(_ title: String, fire: Bool = true, dx: CGFloat = 0, dy: CGFloat = 0,

@@ -95,8 +95,11 @@ class KeyLayoutTest {
         val email = build(Plane.LETTERS, InputKind.EMAIL).filter { it.kind == KeyKind.PUNCT }
         assertEquals(listOf("@", "."), email.map { it.insert })
         val url = build(Plane.LETTERS, InputKind.URL).filter { it.kind == KeyKind.PUNCT }
-        assertEquals(listOf("/", ".com", "."), url.map { it.insert })
-        near(url[1].width, 0.15f * W)
+        // Issue #113: không phím ".com" — đuôi tên miền ở giữ "."; space rộng bằng ô thường.
+        assertEquals(listOf("/", "."), url.map { it.insert })
+        val urlSpace = build(Plane.LETTERS, InputKind.URL).first { it.kind == KeyKind.SPACE }
+        val normalSpace = build(Plane.LETTERS).first { it.kind == KeyKind.SPACE }
+        near(urlSpace.width, normalSpace.width)
         // plane số không đổi theo kind
         val num = build(Plane.NUMBERS, InputKind.EMAIL).filter { it.kind == KeyKind.PUNCT }
         assertEquals(listOf(",", "."), num.map { it.insert })

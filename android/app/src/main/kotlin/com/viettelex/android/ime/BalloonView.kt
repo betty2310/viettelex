@@ -75,7 +75,84 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
         invalidate((ox - pad).toInt(), (oy - pad).toInt(), (ox + bubbleW + pad).toInt(), (oy + shapeH + pad).toInt())
     }
 
+    // MARK: popup nhiều lựa chọn (DomainPopup / KeyVariants)
+    // Hàng ô nổi trên phím: ô đang chọn nền màu nhấn (action) chữ actionInk như stock (ô xanh
+    // chữ trắng). Paint/mảng dựng LƯỜI lần đầu mở popup — bàn phím không bao giờ giữ thì 0 chi phí.
+
+    private class Pop(theme: ImeTheme) {
+        val panel = theme.fill(theme.balloonFill).apply {
+            if (Build.VERSION.SDK_INT >= 28) setShadowLayer(theme.dp(3f), 0f, theme.dp(1.5f), 0x4D000000)
+        }
+        val hi = theme.fill(theme.action)
+        val text = theme.text(18f, color = theme.balloonInk)
+        val ink = theme.balloonInk
+        val selInk = theme.actionInk
+        val rect = android.graphics.RectF()
+        val fm = Paint.FontMetrics()
+        var choices: List<String> = emptyList()
+        var slotL = FloatArray(0)
+        var size = FloatArray(0)
+        var itemW = 0f
+        var sel = -1
+    }
+    private var pop: Pop? = null
+    private var popVisible = false
+
+    /** Popup đang hiện (test/debug). */
+    val popupVisible: Boolean get() = popVisible
+    /** Ô đang chọn (-1 = không chọn / huỷ). */
+    val popupSelection: Int get() = if (popVisible) pop?.sel ?: -1 else -1
+
+    /**
+     * Hiện hàng [choices] trong khung panel (toạ độ view gốc); [slotLefts] mép trái từng ô,
+     * [itemW] bề rộng ô, [textSp] cỡ chữ (tự thu nhỏ cho vừa ô, vd ".com.vn"), [sel] ô chọn sẵn.
+     */
+    fun showPopup(l: Float, t: Float, r: Float, b: Float, slotLefts: FloatArray, itemW: Float,
+                  choices: List<String>, textSp: Float, sel: Int) {
+        val p = pop ?: Pop(theme).also { pop = it }
+        p.rect.set(l, t, r, b)
+        p.choices = choices; p.slotL = slotLefts; p.itemW = itemW; p.sel = sel
+        val full = theme.sp(textSp)
+        p.text.textSize = full
+        val room = itemW - theme.dp(6f)
+        p.size = FloatArray(choices.size) { i ->
+            val w = p.text.measureText(choices[i])
+            if (w > room && w > 0f) full * maxOf(0.6f, room / w) else full
+        }
+        popVisible = true
+        invalidate()
+    }
+
+    fun selectPopup(sel: Int) {
+        val p = pop ?: return
+        if (!popVisible || p.sel == sel) return
+        p.sel = sel
+        invalidate()
+    }
+
+    fun hidePopup() {
+        if (!popVisible) return
+        popVisible = false
+        invalidate()
+    }
+
+    private fun drawPopup(c: Canvas, p: Pop) {
+        val r = theme.dp(10f)
+        c.drawRoundRect(p.rect, r, r, p.panel)
+        val inset = theme.dp(4f)
+        val top = p.rect.top + inset; val bot = p.rect.bottom - inset
+        for (i in p.choices.indices) {
+            val x0 = p.slotL[i]
+            if (i == p.sel) c.drawRoundRect(x0 + theme.dp(1f), top, x0 + p.itemW - theme.dp(1f), bot, theme.dp(7f), theme.dp(7f), p.hi)
+            p.text.textSize = p.size[i]
+            p.text.color = if (i == p.sel) p.selInk else p.ink
+            p.text.getFontMetrics(p.fm)
+            c.drawText(p.choices[i], x0 + p.itemW / 2, (top + bot) / 2 - (p.fm.ascent + p.fm.descent) / 2, p.text)
+        }
+    }
+
     override fun onDraw(c: Canvas) {
+        if (popVisible) pop?.let { drawPopup(c, it) }
         if (!visible) return
         c.save()
         c.translate(ox, oy)

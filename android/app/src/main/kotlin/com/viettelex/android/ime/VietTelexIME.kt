@@ -368,7 +368,8 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             capSentences = field.capSentences, suggestionsAllowed = field.suggestionsAllowed,
             capWords = field.capWords, capCharacters = field.capCharacters,
             initialCaps = info.initialCapsMode != 0, noLearning = field.noLearning,
-            packageName = info.packageName, urlField = proxy.uriField))
+            packageName = info.packageName, urlField = proxy.uriField,
+            emailField = field.kind == InputKind.EMAIL))
         // Ngôn ngữ (vuốt phím cách) lưu riêng: ghi không đụng prefs cài đặt (listener/theme).
         session.restoreLanguage(stateStore().getString(Keys.KEYBOARD_LANGUAGE, null), proxy)
         hwSetting = settings.hardwareTelex
@@ -710,6 +711,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         val m = KeyAlternates.map(st.longPressNumbers, st.longPressSymbols, st.numberRow,
             accessibility = accessibility?.isTouchExplorationEnabled == true)
         keyboard?.setAlternates(m)
+        keyboard?.popoversEnabled = accessibility?.isTouchExplorationEnabled != true
         session.setLetterAlternates(m.isNotEmpty())
     }
 

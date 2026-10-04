@@ -54,6 +54,8 @@ data class FieldTraits(
     val packageName: String? = null,
     /** Ô URL (TYPE_TEXT_VARIATION_URI — omnibox tự hoàn tất): không gõ tắt. */
     val urlField: Boolean = false,
+    /** Ô email (TYPE_TEXT_VARIATION_(WEB_)EMAIL_ADDRESS): thanh gợi ý chỉ hiện chip đuôi mail ([EmailDomains]). */
+    val emailField: Boolean = false,
 ) {
     /** Cách ghi chữ vào ô theo app (bảng [WriteMode.forPackage]). */
     val writeMode: WriteMode get() = WriteMode.forPackage(packageName)
@@ -207,6 +209,11 @@ class KeyboardSession(
     var autoCapitalize = true
     /** Bar tắt ở setting hoặc ô cấm. */
     var suggestionsActive = true; private set
+    /**
+     * Ô email (literal): thanh chỉ hiện chip đuôi mail sau "@" ([EmailDomains], như iOS) — đọc
+     * context mỗi lượt gợi ý CHỈ ở ô email; ô khác không qua nhánh này (0 chi phí).
+     */
+    private var emailBar = false
     /** Bar thu gọn — pipeline gợi ý ngừng. IME set theo chevron. */
     var barCollapsed = false
     private var lastKeyWasEmailTrigger = false
@@ -329,7 +336,9 @@ class KeyboardSession(
         swipeEnglish = settings.swipeEnglish
         autoCapitalize = settings.autoCapitalize
         recentEnglish.clear(); langRecent.clear()
-        suggestionsActive = settings.showSuggestions && field.suggestionsAllowed && !field.isSecure && !field.passthrough
+        emailBar = settings.showSuggestions && field.emailField && !field.isSecure
+        suggestionsActive = (settings.showSuggestions && field.suggestionsAllowed && !field.isSecure && !field.passthrough) ||
+            emailBar
         lastWord = null; lastWord2 = null
         lastInsertWasSpace = false
         lastCommit = null
@@ -903,6 +912,8 @@ class KeyboardSession(
         suggestReq++
         numberChip = null; mathChip = null
         if (!suggestionsActive || barCollapsed) return SuggestionPlan.Ready(null)
+        if (emailBar) return SuggestionPlan.Ready(SuggestionSet(
+            nextWords = proxy.contextBeforeInput()?.let { b -> EmailDomains.chips(b).map { it.label } } ?: emptyList()))
         swipeAlternatives?.let { alts ->
             val u = reviseUndo
             return SuggestionPlan.Ready(SuggestionSet(nextWords = alts, actionLabel = u?.let { "↩\uFE0E ${it.first}" },
@@ -967,6 +978,18 @@ class KeyboardSession(
         return SuggestionPlan.Ready(SuggestionSet(literal = literal, nextWords = next, paste = paste,
             number = number, math = math, clipChips = chips,
             actionLabel = if (offer) ADD_TONES_LABEL else null, action = if (offer) SuggestionSet.ADD_TONES_TOKEN else null))
+    }
+
+    /**
+     * Chạm chip đuôi mail: chèn phần còn thiếu — tính lại từ context lúc chạm (con trỏ có thể
+     * đã dời), không khớp chip nào ⇒ bỏ (không chèn mù).
+     */
+    private fun acceptEmailChip(label: String, proxy: TextProxy) {
+        val before = proxy.contextBeforeInput() ?: return
+        val chip = EmailDomains.chips(before, EmailDomains.providers.size).firstOrNull { it.label == label } ?: return
+        proxy.insertText(chip.insert)
+        bridge.reset()
+        lastWord = null; lastWord2 = null
     }
 
     /** Chip số cho token trước con trỏ (đọc chữ / định dạng tiền / máy tính nhanh). */
@@ -1125,6 +1148,7 @@ class KeyboardSession(
      * Sau đó IME gọi updateAutoShift + refresh bar, phát click.
      */
     fun acceptSuggestion(item: String, proxy: TextProxy) {
+        if (emailBar) { acceptEmailChip(item, proxy); return }
         if (item == SuggestionSet.PASTE_IMAGE_TOKEN) {
             pasteUsedChange = clipboard?.changeCount ?: -1; pasteCached = false
             return

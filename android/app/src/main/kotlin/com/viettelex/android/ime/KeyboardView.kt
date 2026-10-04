@@ -11,7 +11,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import com.viettelex.android.R
+import com.viettelex.keyboard.DomainPopup
 import com.viettelex.keyboard.KeyAlternates
+import com.viettelex.keyboard.KeyVariants
 import com.viettelex.keyboard.EmojiSearch
 import com.viettelex.keyboard.EmojiSearchSession
 import com.viettelex.keyboard.GestureClassifier
@@ -132,6 +134,20 @@ class KeyboardView(
     private var templatesEnabled = true
     private var templates: List<TemplateItem> = emptyList()
 
+    // --- popup nhiều lựa chọn kiểu stock iOS (DomainPopup / KeyVariants) ---
+    // Giữ "." bàn chữ ô URL / email ⇒ đuôi tên miền; giữ phím bàn số / ký hiệu ⇒ biến thể
+    // (" → ” “ „ » «, $ → ₫ € …). Ô gốc chọn sẵn, trượt chọn, nhấc chèn, trượt xa huỷ.
+    /** IME tắt khi TalkBack / touch exploration (giữ là cử chỉ của trình đọc). */
+    var popoversEnabled = true
+        set(v) { if (field != v) { field = v; if (!v) dropPopover() } }
+    private var popHold: DomainPopup.Hold? = null
+    private var popPid = -1
+    private var popKey: LaidKey? = null
+    private var popVariants = false
+    private var popX = 0f
+    private var popY = 0f
+    private val popRun = Runnable { firePopover() }
+
     /**
      * Công cụ văn bản (PlusGate TEXT_TOOLS) — hai lối vào: hàng công cụ cuối bảng sửa văn
      * bản (EditPanel, ô [EditPanel.TOOL_PREFIX]…, gọi thẳng [Listener.onTextTool] và ở lại
@@ -186,12 +202,10 @@ class KeyboardView(
     // Gboard: chữ 22 sp regular, nhãn chức năng 14 sp medium (font hệ thống sans-serif)
     private val letterPaint = theme.text(22f)
     private val controlPaint = theme.text(14f, medium = true)
-    private val comPaint = theme.text(16f)
     private val badgePaint = theme.text(14f, medium = true)
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = theme.ink }
     private val letterOff = theme.centerOffset(letterPaint)
     private val controlOff = theme.centerOffset(controlPaint)
-    private val comOff = theme.centerOffset(comPaint)
     private val digitPaint = theme.text(24f)
     private val digitOff = theme.centerOffset(digitPaint)
     private val sidePaint = theme.text(20f)
@@ -489,6 +503,7 @@ class KeyboardView(
     private fun rebuild() {
         if (width == 0) return
         dropAlt()                         // phím có thể dời / đổi plane
+        dropPopover()
         val sig = signature()
         if (sig != builtSig) { planeCache.clear(); builtSig = sig }
         keys = planeCache.getOrPut(plane) {
@@ -678,8 +693,7 @@ class KeyboardView(
                 drawLabel(c, k.hint, cx, cy + hintDrop, hintPaint, hintOff, (contentAlpha * 0.7f).toInt())
             }
             KeyKind.PUNCT -> {
-                if (k.label == ".com") drawLabel(c, k.label, cx, cy, comPaint, comOff, contentAlpha)
-                else drawLabel(c, k.label, cx, cy, letterPaint, letterOff, contentAlpha)
+                drawLabel(c, k.label, cx, cy, letterPaint, letterOff, contentAlpha)
                 // Gợi ý giữ lâu kiểu Gboard: 🎤 nhỏ, mờ ở góc trên-phải phím ",".
                 if (isVoiceComma(k)) icon(c, ImeIcons.MIC, k.right - hintInset, k.top + hintInset, 10f, theme.ink, (contentAlpha * 0.55f).toInt())
                 else if (isPeriodComma(k)) drawLabel(c, KeyAlternates.COMMA_ALT, k.right - hintInset + theme.dp(2f), k.top + hintInset, hintPaint, hintOff, (contentAlpha * 0.55f).toInt())
@@ -891,6 +905,7 @@ class KeyboardView(
         if (swiping) return
         if (swipePid >= 0 && pid != swipePid) { classifier.pointerAdded(); stopSwipeTracking() }
         settleAlt()                       // ký tự phụ đang giữ chốt TRƯỚC phím mới
+        settlePopover()                   // popup đang mở chốt ô đang chọn TRƯỚC phím mới
         ptrDownX[pid] = x; ptrDownY[pid] = y
         if (plane == Plane.EMOJI) { commits.flush(); ptrPane[pid] = true; emojiPane.down(pid, x, y); return }
         if (plane == Plane.TEMPLATES && templatesPane.contains(x, y)) {
@@ -943,6 +958,7 @@ class KeyboardView(
                 feedback.click(Feedback.LETTER, this)
                 if (keyPreview) showBalloon(k, k.label)
                 commits.arm(k, textFire(k.insert))
+                armPopover(pid, k, x, y)
             }
             KeyKind.PAD -> {
                 feedback.click(Feedback.LETTER, this)
@@ -959,7 +975,7 @@ class KeyboardView(
                 } else if (isPeriodComma(k)) {
                     commaPtr = pid; commaKey = k; periodFired = false
                     postDelayed(periodRun, KeyAlternates.HOLD_MS)
-                }
+                } else armPopover(pid, k, x, y)
             }
             KeyKind.SPACE -> {
                 feedback.click(Feedback.SPACE, this)
@@ -1035,6 +1051,7 @@ class KeyboardView(
             }
             return
         }
+        if (pid == popPid) popoverMove(x, y)
         val k = ptrKey[pid] ?: return
         val movedFar = abs(x - ptrDownX[pid]) > slop || abs(y - ptrDownY[pid]) > slop
         when {
@@ -1092,10 +1109,14 @@ class KeyboardView(
                     if (alt != null) commitAlt(alt, k)   // cancel vẫn chốt như chữ thường
                 }
             }
-            KeyKind.CHAR -> { hideBalloon(k); commits.release(k) }
+            KeyKind.CHAR -> {
+                hideBalloon(k); commits.release(k)   // popup đã mở ⇒ chèn ô đang chọn
+                if (pid == popPid) dropPopover()
+            }
             KeyKind.PUNCT, KeyKind.PAD -> {
                 if (pid == commaPtr) cancelCommaHold()
                 commits.release(k)        // giữ lâu giọng nói ⇒ disarm rồi, không chèn gì; giữ ra "." ⇒ chèn "."
+                if (pid == popPid) dropPopover()
             }
             KeyKind.RETURN -> {
                 if (pid == returnPtr) { removeCallbacks(returnHoldRun); returnPtr = -1; hideBalloon(k) }
@@ -1182,6 +1203,9 @@ class KeyboardView(
     private fun cancelAllTouches() {
         abortSwipe()
         dropAlt()
+        // Bàn phím ẩn / đổi một tay giữa lúc popup mở: không chèn đuôi đang chọn (flush dưới).
+        popKey?.let { if (popHold?.fired == true) commits.disarm(it) }
+        dropPopover()
         for (i in 0 until MAX_PTR) {
             ptrKey[i]?.pressed = false
             ptrKey[i] = null; ptrPane[i] = false
@@ -1340,6 +1364,85 @@ class KeyboardView(
         if (altShiftWas == Shift.ON && shift == Shift.OFF) { shift = Shift.ON; invalidate() }
         emit(Key.Text(alt, replacesLetter = true))
     }
+
+    // MARK: popup nhiều lựa chọn (DomainPopup / KeyVariants)
+
+    /** Lựa chọn của phím [k] trên plane hiện tại; rỗng ⇒ không hẹn giờ (0 chi phí). */
+    private fun popoverChoices(k: LaidKey): List<String> {
+        if (!popoversEnabled) return emptyList()
+        return when (plane) {
+            Plane.LETTERS -> if (k.kind != KeyKind.PUNCT) emptyList() else DomainPopup.choices(
+                when (inputKind) {
+                    InputKind.URL -> DomainPopup.Field.URL
+                    InputKind.EMAIL -> DomainPopup.Field.EMAIL
+                    else -> DomainPopup.Field.NORMAL
+                }, k.label, lettersPlane = true)
+            Plane.NUMBERS, Plane.SYMBOLS -> KeyVariants.variants(k.label, symbolPlane = true,
+                numericField = inputKind.padPlane != null)
+            else -> emptyList()
+        }
+    }
+
+    /** Chạm phím có popup (đã arm ký tự gốc): hẹn giờ như giữ phím chữ. */
+    private fun armPopover(pid: Int, k: LaidKey, x: Float, y: Float) {
+        val choices = popoverChoices(k)
+        if (choices.isEmpty()) return
+        dropPopover()
+        popHold = DomainPopup.Hold(choices)
+        popPid = pid; popKey = k; popX = x; popY = y
+        popVariants = plane != Plane.LETTERS
+        postDelayed(popRun, KeyAlternates.HOLD_MS)
+    }
+
+    /** Hết giờ: phím còn chờ chốt ⇒ mở popup (ô gốc chọn sẵn), nhấc/ngón khác chạm chèn ô đang chọn. */
+    private fun firePopover() {
+        val h = popHold ?: return
+        val k = popKey ?: return
+        val n = h.choices.size
+        val wDp = width / d
+        val itemW = minOf(if (popVariants) (if (theme.tablet) 56f else 38f) else (if (theme.tablet) 68f else 56f),
+            (wDp - 4f) / n)
+        val l = DomainPopup.layout(k.centerX / d, itemW, n, wDp)
+        // Toạ độ dp theo overlay (strip + phím): popup được phép lấn lên strip, kẹp ở 0.
+        val off = top / d
+        val panelH = if (theme.tablet) 52f else 46f
+        val popTop = maxOf((k.top / d + off) - 8f - panelH, 0f)
+        val ok = h.fire(commits, k, l, popTop, k.bottom / d + off, popX / d, popY / d + off) { s -> emit(Key.Text(s)) }
+        if (!ok) { dropPopover(); return }
+        hideBalloon(k)
+        val inset = 4f
+        balloon.showPopup((l.originX - inset) * d, popTop * d, (l.originX + l.width + inset) * d, (popTop + panelH) * d,
+            FloatArray(n) { l.slotMinX(it) * d }, itemW * d, h.choices,
+            if (popVariants) (if (theme.tablet) 26f else 24f) else (if (theme.tablet) 20f else 18f),
+            h.selection ?: -1)
+        feedback.tick(this)
+    }
+
+    private fun popoverMove(x: Float, y: Float) {
+        popX = x; popY = y
+        val h = popHold ?: return
+        if (!h.fired || !h.move(x / d, y / d + top / d)) return
+        balloon.selectPopup(h.selection ?: -1)
+        if (h.selection != null) feedback.tick(this)
+    }
+
+    /** Ngón khác chạm: chưa đủ giờ ⇒ chỉ là chạm (ký tự gốc chốt bởi flush); đã mở ⇒ chốt ô đang chọn NGAY. */
+    private fun settlePopover() {
+        val h = popHold ?: return
+        val k = popKey
+        if (h.fired && k != null) commits.release(k)
+        dropPopover()
+    }
+
+    private fun dropPopover() {
+        if (popHold == null) return
+        removeCallbacks(popRun)
+        if (popHold?.fired == true) balloon.hidePopup()
+        popHold = null; popPid = -1; popKey = null
+    }
+
+    /** Test/debug: popup đang hiện + ô chọn. */
+    internal val popoverState: Pair<Boolean, String?> get() = balloon.popupVisible to popHold?.chosen
 
     // MARK: trackpad
 

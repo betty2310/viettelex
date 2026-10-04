@@ -1,4 +1,4 @@
-// DomainPopupTests — giữ "." / ".com" ở ô địa chỉ/URL/email ra hàng đuôi tên miền như stock,
+// DomainPopupTests — giữ "." ở ô địa chỉ/URL/email ra hàng đuôi tên miền như stock,
 // và chip đuôi mail sau "@" ở ô email (EmailDomains).
 import XCTest
 import UIKit
@@ -8,10 +8,10 @@ final class DomainPopupTests: XCTestCase {
 
     func testChoicesPerField() {
         let t = DomainPopup.tlds
-        XCTAssertEqual(t, [".com", ".vn", ".net", ".org", ".edu"], ".com mặc định, .vn thứ hai")
+        XCTAssertEqual(t, [".com", ".vn", ".com.vn", ".net", ".org", ".edu"], ".com mặc định, .vn/.com.vn kế (#113)")
         XCTAssertEqual(DomainPopup.choices(kind: .search, key: ".", lettersPlane: true), t)
         XCTAssertEqual(DomainPopup.choices(kind: .url, key: ".", lettersPlane: true), t)
-        XCTAssertEqual(DomainPopup.choices(kind: .url, key: ".com", lettersPlane: true), t)
+        XCTAssertEqual(DomainPopup.choices(kind: .url, key: ".com", lettersPlane: true), [], "không còn phím .com (#113)")
         XCTAssertEqual(DomainPopup.choices(kind: .email, key: ".", lettersPlane: true), t)
         XCTAssertEqual(DomainPopup.choices(kind: .url, key: "/", lettersPlane: true), [])
         XCTAssertEqual(DomainPopup.choices(kind: .email, key: "@", lettersPlane: true), [])
@@ -24,7 +24,7 @@ final class DomainPopupTests: XCTestCase {
     // MARK: bố cục + chỉ số dưới ngón
 
     func testLayoutLeftToRightWhenRoomOnRight() {
-        let l = DomainPopup.layout(keyMidX: 60, itemWidth: 56, count: 5, containerWidth: 390)
+        let l = DomainPopup.layout(keyMidX: 60, itemWidth: 56, count: 6, containerWidth: 390)
         XCTAssertFalse(l.mirrored)
         XCTAssertEqual(l.originX, 32)
         XCTAssertEqual(l.slotMinX(0), 32)
@@ -33,8 +33,8 @@ final class DomainPopupTests: XCTestCase {
         }
         XCTAssertEqual(idx(60), 0, "ô dưới ngón lúc mở = .com")
         XCTAssertEqual(idx(60 + 56), 1)
-        XCTAssertEqual(idx(60 + 56 * 4), 4)
-        XCTAssertEqual(idx(l.originX + l.width + 10), 4, "lố mép trong ngần: kẹp ô cuối")
+        XCTAssertEqual(idx(60 + 56 * 5), 5)
+        XCTAssertEqual(idx(l.originX + l.width + 10), 5, "lố mép trong ngần: kẹp ô cuối")
         XCTAssertEqual(idx(l.originX - 10), 0)
         XCTAssertNil(idx(l.originX + l.width + DomainPopup.cancelSlackX + 1), "trượt xa ngang ⇒ huỷ")
         XCTAssertNil(idx(l.originX - DomainPopup.cancelSlackX - 1))
@@ -44,14 +44,14 @@ final class DomainPopupTests: XCTestCase {
     }
 
     func testLayoutMirrorsNearRightEdge() {
-        let l = DomainPopup.layout(keyMidX: 350, itemWidth: 56, count: 5, containerWidth: 390)
+        let l = DomainPopup.layout(keyMidX: 350, itemWidth: 56, count: 6, containerWidth: 390)
         XCTAssertTrue(l.mirrored)
         XCTAssertEqual(l.slotMinX(0), 350 - 28, ".com vẫn ngay trên phím")
         XCTAssertGreaterThanOrEqual(l.originX, 2)
         let i = { (x: CGFloat) in DomainPopup.index(at: CGPoint(x: x, y: 10), startX: 350, layout: l, top: 0, bottom: 60) }
         XCTAssertEqual(i(350), 0)
         XCTAssertEqual(i(350 - 56), 1, "loe sang trái: trượt trái ra .vn")
-        XCTAssertEqual(i(350 - 56 * 4), 4)
+        XCTAssertEqual(i(350 - 56 * 5), 5)
     }
 
     func testLayoutClampedInsideNarrowContainer() {
@@ -115,11 +115,22 @@ final class DomainPopupTests: XCTestCase {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad)
         var out: [String] = []
         let (kb, host) = makeKeyboard(.url) { out.append($0) }
-        kb.debugDomainHold(".com", keepOpen: true)
+        kb.debugDomainHold(".", keepOpen: true)
         XCTAssertTrue(kb.debugDomainPopupVisible)
         XCTAssertEqual(kb.debugDomainSelection, ".com")
         XCTAssertEqual(out, [])
         withExtendedLifetime(host) {}
+    }
+
+    /// Issue #113: ô URL không còn phím ".com" — space rộng như stock, "/" vẫn còn.
+    @MainActor func testURLRowHasNoDotComKey() throws {
+        let (kb, host) = makeKeyboard(.url) { _ in }
+        XCTAssertFalse(kb.debugDomainHold(".com", fire: false), "không có phím .com")
+        var out: [String] = []
+        let (kb2, host2) = makeKeyboard(.url) { out.append($0) }
+        XCTAssertFalse(kb2.debugDomainHold("/"))
+        XCTAssertEqual(out, ["T/"], "\"/\" vẫn ở hàng đáy")
+        withExtendedLifetime((kb, host, host2)) {}
     }
 
     @MainActor func testOtherFieldsHaveNoPopup() throws {

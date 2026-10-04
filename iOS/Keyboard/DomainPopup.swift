@@ -1,19 +1,20 @@
-// DomainPopup — giữ phím "." (và ".com") ở ô địa chỉ / URL để chọn đuôi tên miền như stock
-// iOS. Phần THUẦN (không UIKit): danh sách lựa chọn theo loại ô, bố cục hàng ô, chỉ số ô
+// DomainPopup — giữ phím "." ở ô địa chỉ / URL / email để chọn đuôi tên miền như stock
+// iOS (issue #113: ô URL bỏ phím ".com" riêng — space rộng như stock, đuôi gom vào giữ "."). Phần THUẦN (không UIKit): danh sách lựa chọn theo loại ô, bố cục hàng ô, chỉ số ô
 // dưới ngón theo toạ độ x, luật huỷ khi trượt xa. View chỉ dựng popup khi hết giờ giữ.
 import CoreGraphics
 
 enum DomainPopup {
-    /// Đuôi tên miền — .vn đứng thứ hai (người dùng Việt), .com mặc định như stock.
-    static let tlds = [".com", ".vn", ".net", ".org", ".edu"]
+    /// Đuôi tên miền — .com mặc định như stock, .vn / .com.vn kế tiếp cho người dùng Việt
+    /// (issue #113). Bản Kotlin song sinh: android/keyboard/…/DomainPopup.kt.
+    static let tlds = [".com", ".vn", ".com.vn", ".net", ".org", ".edu"]
 
-    /// Phím `title` ở bàn CHỮ của ô `kind` có popup không. Chỉ thanh địa chỉ/tìm kiếm
-    /// (phím "."), ô URL (phím "." và ".com") và ô email (phím "."); ô khác ⇒ rỗng (0 chi phí).
+    /// Phím `title` ở bàn CHỮ của ô `kind` có popup không. Chỉ phím "." của thanh địa
+    /// chỉ/tìm kiếm, ô URL và ô email; ô khác ⇒ rỗng (0 chi phí).
     static func choices(kind: KeyboardView.InputKind, key title: String, lettersPlane: Bool) -> [String] {
         guard lettersPlane else { return [] }
         switch kind {
         case .search: return title == "." ? tlds : []
-        case .url: return title == "." || title == ".com" ? tlds : []
+        case .url: return title == "." ? tlds : []
         case .email: return title == "." ? tlds : []
         default: return []
         }
