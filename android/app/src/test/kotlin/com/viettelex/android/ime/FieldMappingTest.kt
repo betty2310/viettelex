@@ -6,6 +6,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.viettelex.keyboard.FieldTraits
+import com.viettelex.keyboard.StripMode
 
 class FieldMappingTest {
     private fun m(type: Int, opts: Int = 0) = FieldMapping.map(type, opts)
@@ -199,5 +201,37 @@ class FieldMappingTest {
         assertFalse(FieldMapping.allowsHoldNewline(multiLine = false, secure = false, rawKeys = false))
         assertFalse(FieldMapping.allowsHoldNewline(multiLine = true, secure = true, rawKeys = false))
         assertFalse(FieldMapping.allowsHoldNewline(multiLine = true, secure = false, rawKeys = true))
+    }
+
+    /** Ô thật → dải hiện gì (như VietTelexIME.configureField: FieldConfig → FieldTraits → StripMode). */
+    private fun strip(type: Int, opts: Int = 0, incognito: Boolean = false): StripMode {
+        val f = m(type, opts)
+        return StripMode.of(true, FieldTraits(isSecure = f.isSecure, passthrough = f.passthrough,
+            suggestionsAllowed = f.suggestionsAllowed, noLearning = f.noLearning,
+            emailField = f.kind == InputKind.EMAIL, stripTools = f.stripTools), incognito || f.noLearning)
+    }
+
+    @Test fun stripToolsInNoSuggestionFields() {
+        // #113: Messenger chat với Trang — NO_SUGGESTIONS ⇒ ☰/con trỏ/📋/⌄ + Dán, không chữ.
+        assertEquals(StripMode.TOOLS, strip(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_MULTI_LINE or
+            TYPE_TEXT_FLAG_CAP_SENTENCES or TYPE_TEXT_FLAG_NO_SUGGESTIONS))
+        assertEquals(StripMode.TOOLS, strip(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
+            TYPE_TEXT_FLAG_MULTI_LINE))                                    // ô chat "VISIBLE_PASSWORD" giả
+        assertEquals(StripMode.TOOLS, strip(TYPE_CLASS_TEXT, EditorInfo.IME_FLAG_FORCE_ASCII))
+        assertEquals(StripMode.FULL, strip(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_CAP_SENTENCES))
+        assertEquals(StripMode.FULL, strip(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI))
+        assertEquals(StripMode.FULL, strip(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_EMAIL_ADDRESS))
+    }
+
+    @Test fun stripBlankInSensitiveFields() {
+        for (v in listOf(TYPE_TEXT_VARIATION_PASSWORD, TYPE_TEXT_VARIATION_WEB_PASSWORD, TYPE_TEXT_VARIATION_VISIBLE_PASSWORD))
+            assertEquals(StripMode.BLANK, strip(TYPE_CLASS_TEXT or v))
+        assertEquals(StripMode.BLANK, strip(TYPE_CLASS_NUMBER or TYPE_NUMBER_VARIATION_PASSWORD))
+        assertEquals(StripMode.BLANK, strip(TYPE_CLASS_NUMBER))             // bàn số: ☰ về bàn chữ ⇒ không
+        assertEquals(StripMode.BLANK, strip(TYPE_CLASS_PHONE))
+        assertEquals(StripMode.BLANK, strip(TYPE_NULL))                      // terminal
+        assertEquals(StripMode.BLANK, strip(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+            EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))                   // ẩn danh (Chrome…)
+        assertEquals(StripMode.BLANK, strip(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_NO_SUGGESTIONS, incognito = true))
     }
 }

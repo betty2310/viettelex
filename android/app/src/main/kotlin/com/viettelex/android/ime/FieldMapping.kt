@@ -34,6 +34,11 @@ data class FieldConfig(
     val multiLine: Boolean = false,
     /** Giữ lâu Enter = chèn "\n" thật ([FieldMapping.allowsHoldNewline]). */
     val holdNewline: Boolean = false,
+    /**
+     * Ô cấm gợi ý chữ vẫn hiện thanh công cụ (☰/con trỏ/📋/⌄ + Dán) — #113 Messenger chat với
+     * Trang (NO_SUGGESTIONS). Chỉ ô CHỮ không mật khẩu; bàn số/TYPE_NULL/mật khẩu: dải trống.
+     */
+    val stripTools: Boolean = false,
 )
 
 object FieldMapping {
@@ -127,7 +132,8 @@ object FieldMapping {
             capWords = capWords, capCharacters = capCharacters,
             noLearning = (imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0,
             multiLine = multiLine,
-            holdNewline = allowsHoldNewline(multiLine, secure, rawKeys))
+            holdNewline = allowsHoldNewline(multiLine, secure, rawKeys),
+            stripTools = text && !secure)
     }
 
     /**

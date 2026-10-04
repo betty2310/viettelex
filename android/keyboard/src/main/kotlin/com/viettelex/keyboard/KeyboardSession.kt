@@ -56,9 +56,44 @@ data class FieldTraits(
     val urlField: Boolean = false,
     /** Ô email (TYPE_TEXT_VARIATION_(WEB_)EMAIL_ADDRESS): thanh gợi ý chỉ hiện chip đuôi mail ([EmailDomains]). */
     val emailField: Boolean = false,
+    /**
+     * Ô CHỮ (không mật khẩu, không TYPE_NULL, không bàn số) — được hiện thanh công cụ
+     * (☰/con trỏ/📋/⌄ + lời mời Dán) dù cấm gợi ý chữ (NO_SUGGESTIONS: Messenger chat với
+     * Trang, #113). FieldMapping.map tính; mặc định false = như cũ (dải trống).
+     */
+    val stripTools: Boolean = false,
 ) {
     /** Cách ghi chữ vào ô theo app (bảng [WriteMode.forPackage]). */
     val writeMode: WriteMode get() = WriteMode.forPackage(packageName)
+}
+
+/** Dải gợi ý hiện gì ở ô hiện tại ([StripMode.of]). */
+enum class StripMode {
+    /** Tắt "Thanh gợi ý" trong cài đặt: không có dải. */
+    OFF,
+    /** Mật khẩu / ẩn danh / ô không phải chữ: dải trống giữ chiều cao, không UI clipboard. */
+    BLANK,
+    /** Ô cấm gợi ý chữ (NO_SUGGESTIONS, FORCE_ASCII…): ☰/con trỏ/📋/⌄ + Dán/chip clipboard, không chữ/tự sửa. */
+    TOOLS,
+    /** Gợi ý đầy đủ. */
+    FULL;
+
+    /** Dải có vẽ nội dung (thanh công cụ ± gợi ý). */
+    val shown: Boolean get() = this == TOOLS || this == FULL
+
+    companion object {
+        /** Gợi ý chữ được bật ở ô (kể cả chip đuôi mail ô email) = [KeyboardSession.suggestionsActive]. */
+        fun wordsActive(showSuggestions: Boolean, f: FieldTraits): Boolean = showSuggestions &&
+            ((f.suggestionsAllowed && !f.isSecure && !f.passthrough) || (f.emailField && !f.isSecure))
+
+        /** THUẦN: ô + cài đặt → dải hiện gì. [incognito] = ẩn danh thủ công HOẶC NO_PERSONALIZED_LEARNING. */
+        fun of(showSuggestions: Boolean, field: FieldTraits, incognito: Boolean): StripMode = when {
+            !showSuggestions -> OFF
+            wordsActive(true, field) -> FULL
+            field.isSecure || incognito || !field.stripTools -> BLANK
+            else -> TOOLS
+        }
+    }
 }
 
 /**
@@ -214,6 +249,8 @@ class KeyboardSession(
     var autoCapitalize = true
     /** Bar tắt ở setting hoặc ô cấm. */
     var suggestionsActive = true; private set
+    /** Dải hiện gì ở ô này — TOOLS: chỉ thanh công cụ + lời mời Dán (không chữ). */
+    var stripMode = StripMode.FULL; private set
     /**
      * Ô email (literal): thanh chỉ hiện chip đuôi mail sau "@" ([EmailDomains], như iOS) — đọc
      * context mỗi lượt gợi ý CHỈ ở ô email; ô khác không qua nhánh này (0 chi phí).
@@ -342,8 +379,8 @@ class KeyboardSession(
         autoCapitalize = settings.autoCapitalize
         recentEnglish.clear(); langRecent.clear()
         emailBar = settings.showSuggestions && field.emailField && !field.isSecure
-        suggestionsActive = (settings.showSuggestions && field.suggestionsAllowed && !field.isSecure && !field.passthrough) ||
-            emailBar
+        suggestionsActive = StripMode.wordsActive(settings.showSuggestions, field)
+        stripMode = StripMode.of(settings.showSuggestions, field, incognito)
         lastWord = null; lastWord2 = null
         lastInsertWasSpace = false
         lastCommit = null
@@ -916,7 +953,8 @@ class KeyboardSession(
     fun requestSuggestions(proxy: TextProxy): SuggestionPlan {
         suggestReq++
         numberChip = null; mathChip = null
-        if (!suggestionsActive || barCollapsed) return SuggestionPlan.Ready(null)
+        if (barCollapsed) return SuggestionPlan.Ready(null)
+        if (!suggestionsActive) return SuggestionPlan.Ready(if (stripMode == StripMode.TOOLS) toolsOnlySet(proxy) else null)
         if (emailBar) return SuggestionPlan.Ready(SuggestionSet(
             nextWords = proxy.contextBeforeInput()?.let { b -> EmailDomains.chips(b).map { it.label } } ?: emptyList()))
         swipeAlternatives?.let { alts ->
@@ -984,6 +1022,16 @@ class KeyboardSession(
             number = number, math = math, clipChips = chips,
             actionLabel = if (offer) ADD_TONES_LABEL else null, action = if (offer) SuggestionSet.ADD_TONES_TOKEN else null,
             idle = prev == null && literal == null && number == null && math == null && !offer))
+    }
+
+    /**
+     * Ô [StripMode.TOOLS]: chỉ lời mời Dán (một lần mỗi mục — [pasteOnce]) + chip tách số
+     * (Clipboard nâng cao — Plus); không chữ ⇒ bar rỗng thì hiện icon con trỏ/📋.
+     */
+    private fun toolsOnlySet(proxy: TextProxy): SuggestionSet {
+        val paste = pasteOffer(proxy)
+        val chips = if (paste && !incognito && PlusGate.isUnlocked(PlusFeature.ADVANCED_CLIPBOARD)) clipChips() else emptyList()
+        return SuggestionSet(paste = paste, clipChips = chips, idle = true)
     }
 
     /**

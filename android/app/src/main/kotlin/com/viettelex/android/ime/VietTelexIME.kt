@@ -324,7 +324,8 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         inputShown = true
         collapsed = prefs.getBoolean(Keys.SUGGESTION_BAR_COLLAPSED, false)
         session.barCollapsed = collapsed
-        val barOn = session.suggestionsActive
+        // Ô cấm gợi ý chữ nhưng không nhạy cảm (StripMode.TOOLS): vẫn ☰/con trỏ/📋/⌄ + Dán (#113).
+        val barOn = session.stripMode.shown
         st.configure(barOn, collapsed, settings.templatesEnabled,
             reserved = KeyLayout.stripReserved(settings.showSuggestions))
         applyFloating(settings.floatingKeyboard, settings)
@@ -377,7 +378,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             capWords = field.capWords, capCharacters = field.capCharacters,
             initialCaps = info.initialCapsMode != 0, noLearning = field.noLearning,
             packageName = info.packageName, urlField = proxy.uriField,
-            emailField = field.kind == InputKind.EMAIL))
+            emailField = field.kind == InputKind.EMAIL, stripTools = field.stripTools))
         // Ngôn ngữ (vuốt phím cách) lưu riêng: ghi không đụng prefs cài đặt (listener/theme).
         session.restoreLanguage(stateStore().getString(Keys.KEYBOARD_LANGUAGE, null), proxy)
         hwSetting = settings.hardwareTelex
@@ -1190,7 +1191,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     private fun refreshBar() {
         val st = strip ?: return
-        if (!session.suggestionsActive || session.barCollapsed) return
+        if (!session.stripMode.shown || session.barCollapsed) return
         when (val plan = session.requestSuggestions(proxy)) {
             is SuggestionPlan.Ready -> st.show(plan.set)
             is SuggestionPlan.Background -> {

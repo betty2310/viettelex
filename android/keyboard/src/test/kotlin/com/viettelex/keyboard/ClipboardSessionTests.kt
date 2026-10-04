@@ -2,6 +2,7 @@ package com.viettelex.keyboard
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -127,5 +128,80 @@ class ClipboardSessionTests {
         s.insertClip("0912345678", p)
         assertEquals("xin 0912345678", p.text)
         assertFalse(s.bridge.isComposing)
+    }
+
+    // MARK: #113 ô cấm gợi ý chữ (Messenger chat với Trang) vẫn có thanh công cụ + Dán
+
+    private val noSuggest = FieldTraits(suggestionsAllowed = false, stripTools = true)
+
+    @Test fun stripModeTable() {
+        val on = true
+        assertEquals(StripMode.FULL, StripMode.of(on, FieldTraits(), incognito = false))
+        assertEquals(StripMode.FULL, StripMode.of(on, FieldTraits(), incognito = true))     // ẩn danh vẫn gợi ý (chỉ đọc)
+        assertEquals(StripMode.TOOLS, StripMode.of(on, noSuggest, incognito = false))
+        assertEquals(StripMode.TOOLS, StripMode.of(on, noSuggest.copy(passthrough = true), incognito = false))
+        assertEquals(StripMode.BLANK, StripMode.of(on, noSuggest, incognito = true))
+        assertEquals(StripMode.BLANK, StripMode.of(on, noSuggest.copy(isSecure = true), incognito = false))
+        assertEquals(StripMode.BLANK, StripMode.of(on, noSuggest.copy(stripTools = false), incognito = false))
+        assertEquals(StripMode.FULL, StripMode.of(on, FieldTraits(passthrough = true, suggestionsAllowed = false,
+            emailField = true), incognito = false))                                          // chip đuôi mail
+        assertEquals(StripMode.OFF, StripMode.of(false, noSuggest, incognito = false))
+        assertEquals(StripMode.OFF, StripMode.of(false, FieldTraits(), incognito = false))
+        assertTrue(StripMode.TOOLS.shown); assertTrue(StripMode.FULL.shown)
+        assertFalse(StripMode.BLANK.shown); assertFalse(StripMode.OFF.shown)
+    }
+
+    @Test fun toolsModeNoWordsButPasteAndChips() {
+        val s = session(traits = noSuggest); val p = MockProxy()
+        assertFalse(s.suggestionsActive)
+        assertEquals(StripMode.TOOLS, s.stripMode)
+        val empty = s.suggestionsNow(p)!!                       // bar rỗng ⇒ icon con trỏ/📋 hiện
+        assertTrue(empty.nextWords.isEmpty()); assertNull(empty.word); assertFalse(empty.paste)
+        assertTrue(empty.idle)
+        s.typeKeys(p, "nguoi")
+        val typing = s.suggestionsNow(p)!!                      // đang gõ: không chữ, không literal
+        assertNull(typing.word); assertNull(typing.literal); assertTrue(typing.nextWords.isEmpty())
+        val p2 = MockProxy()
+        now += 3000
+        s.invalidatePasteCache()
+        clip.copy("Ma OTP cua quy khach la 482913")
+        val set = s.suggestionsNow(p2)!!
+        assertTrue(set.paste)
+        assertEquals(listOf("Dán OTP 482913"), set.clipChips.map { it.label })
+        assertTrue(set.nextWords.isEmpty())
+        s.pasteOfferVisible(true); s.pasteOfferVisible(false)  // mời một lần mỗi mục
+        now += 3000
+        s.invalidatePasteCache()
+        assertFalse(s.suggestionsNow(p2)!!.paste)
+        s.barCollapsed = true
+        assertNull(s.suggestionsNow(p2))
+    }
+
+    @Test fun toolsModeChipsNeedPlus() {
+        PlusGate.install({ null }, debugBuild = false)
+        PlusGate.paywallEnabled = true
+        try {
+            val s = session(traits = noSuggest); val p = MockProxy()
+            clip.copy("Ma OTP cua quy khach la 482913")
+            val set = s.suggestionsNow(p)!!
+            assertTrue(set.paste)
+            assertTrue(set.clipChips.isEmpty())
+        } finally {
+            PlusGate.install({ null }, debugBuild = false)
+            PlusGate.paywallEnabled = PlusConfig.PAYWALL_ENABLED
+        }
+    }
+
+    @Test fun sensitiveFieldsKeepBlankBand() {
+        val p = MockProxy()
+        clip.copy("xin chào")
+        for (t in listOf(noSuggest.copy(isSecure = true), noSuggest.copy(noLearning = true), noSuggest.copy(stripTools = false))) {
+            val s = session(traits = t)
+            assertEquals(StripMode.BLANK, s.stripMode)
+            assertNull(s.suggestionsNow(p))
+        }
+        val inc = session(settings = KeyboardSettings(incognito = true), traits = noSuggest)
+        assertEquals(StripMode.BLANK, inc.stripMode)
+        assertNull(inc.suggestionsNow(p))
     }
 }
