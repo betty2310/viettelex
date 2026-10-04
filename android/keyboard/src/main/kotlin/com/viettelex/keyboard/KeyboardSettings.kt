@@ -78,6 +78,10 @@ data class KeyboardSettings(
     var rowHeightAdjust: Int = 0,
     /** Hàng phím số 1…0 trên hàng chữ — mặc định TẮT. */
     var numberRow: Boolean = false,
+    /** Phím "." cạnh phím cách (bàn chữ ô thường) — mặc định TẮT; "." = space đôi hoặc bàn 123. */
+    var showPeriodKey: Boolean = false,
+    /** Nâng bàn phím 0…[KEYBOARD_RAISE_MAX] dp (đệm nền dưới hàng đáy) — mặc định 0. */
+    var keyboardRaise: Int = 0,
     /** Giữ q…p ra 1…0 (chỉ khi hàng số tắt) — mặc định BẬT. Giống iOS. */
     var longPressNumbers: Boolean = true,
     /** Giữ a–l, z–m ra ký hiệu — mặc định TẮT. Giống iOS. */
@@ -93,6 +97,10 @@ data class KeyboardSettings(
     var userlmResetAt: Long = 0,
 ) {
     companion object {
+        /** Trần thanh "Nâng bàn phím" (dp). */
+        const val KEYBOARD_RAISE_MAX = 48
+        fun clampRaise(dp: Int): Int = dp.coerceIn(0, KEYBOARD_RAISE_MAX)
+
         /** [get] trả giá trị thô của key (vd `prefs.all[key]`), null nếu vắng. */
         fun load(get: (String) -> Any?): KeyboardSettings {
             val s = KeyboardSettings()
@@ -134,6 +142,8 @@ data class KeyboardSettings(
             s.keyPreview = b(Keys.KEY_PREVIEW, s.keyPreview)
             s.debugTouchLog = b(Keys.DEBUG_TOUCH_LOG, s.debugTouchLog)
             s.numberRow = b(Keys.NUMBER_ROW, s.numberRow)
+            s.showPeriodKey = b(Keys.SHOW_PERIOD_KEY, s.showPeriodKey)
+            s.keyboardRaise = clampRaise((get(Keys.KEYBOARD_RAISE) as? Number)?.toInt() ?: 0)
             s.longPressNumbers = b(Keys.LONG_PRESS_NUMBERS, s.longPressNumbers)
             s.longPressSymbols = b(Keys.LONG_PRESS_SYMBOLS, s.longPressSymbols)
             s.oneHandMode = (get(Keys.ONE_HAND_MODE) as? String)?.takeIf { it == "left" || it == "right" } ?: "off"

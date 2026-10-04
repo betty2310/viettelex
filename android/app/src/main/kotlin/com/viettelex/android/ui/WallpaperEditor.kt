@@ -84,7 +84,8 @@ data class KeyboardFrame(val w: Int, val h: Int, val keysTop: Int, val keysH: In
             val measured = WallpaperMath.parseSize(
                 ctx.getSharedPreferences(Keys.RUNTIME_PREFS, Context.MODE_PRIVATE).getString(Keys.IME_PORTRAIT_SIZE, null))
             val (w, h) = measured ?: WallpaperMath.estimatePortraitPx(minOf(dm.widthPixels, dm.heightPixels),
-                dm.density, keyDp, stripDp, navBarPx(ctx))
+                dm.density, keyDp, stripDp, navBarPx(ctx) +
+                    com.viettelex.android.ime.ImeInsets.raisePx(prefs.getInt(Keys.KEYBOARD_RAISE, Prefs.D.keyboardRaise), dm.density))
             return KeyboardFrame(w, h, strip.coerceAtMost(h), keys.coerceAtMost((h - strip).coerceAtLeast(1)))
         }
 

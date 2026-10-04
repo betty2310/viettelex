@@ -124,7 +124,7 @@ class BackupTests {
             "keyboardTransparency" to 250, "keyLabelTransparency" to 35,
             BackupPrefs.SHORTCUTS_KEY to "# VietTelex — bảng gõ tắt\nko: không\n")
         val p = BackupPrefs.snapshot({ prefs[it] }, listOf(TemplateItem("", "a")), null)
-        assertEquals(38, p.settings!!.size)
+        assertEquals(40, p.settings!!.size)
         assertEquals("vi", p.settings!![Keys.UI_LANGUAGE])   // chưa chọn ⇒ mặc định Tiếng Việt
         assertEquals(100, p.settings!!["keyboardTransparency"])   // kẹp 0…100
         assertEquals(35, p.settings!!["keyLabelTransparency"])
@@ -136,6 +136,8 @@ class BackupTests {
         assertEquals(true, p.settings!!["quickTelex"])
         assertEquals(true, p.settings!!["simpleTelex"])
         assertEquals(10, p.settings!!["rowHeightAdjust"])
+        assertEquals(false, p.settings!![Keys.SHOW_PERIOD_KEY])   // #113 mặc định tắt
+        assertEquals(0, p.settings!![Keys.KEYBOARD_RAISE])        // #112 mặc định 0
         assertNull(p.settings!!["debugTouchLog"])
         assertEquals(mapOf("ko" to "không"), p.shortcuts)
         assertNull(p.learnedWords)
@@ -161,8 +163,22 @@ class BackupTests {
         assertTrue("1 mẫu câu mới" in plan.summary, plan.summary)
     }
 
+    @Test fun periodKeyAndRaiseBackupClamped() {
+        val p = BackupPrefs.snapshot({ mapOf<String, Any?>(Keys.SHOW_PERIOD_KEY to true, Keys.KEYBOARD_RAISE to 99)[it] },
+            emptyList(), null)
+        assertEquals(true, p.settings!![Keys.SHOW_PERIOD_KEY])
+        assertEquals(KeyboardSettings.KEYBOARD_RAISE_MAX, p.settings!![Keys.KEYBOARD_RAISE])
+        val back = HashMap<String, Any?>()
+        back.putAll(BackupPrefs.plan(BackupCodec.decode(BackupCodec.encode(p)), { back[it] }, emptyList()).writes)
+        assertEquals(true, back[Keys.SHOW_PERIOD_KEY])
+        assertEquals(48, back[Keys.KEYBOARD_RAISE])
+        val s = KeyboardSettings.load { back[it] }
+        assertEquals(true, s.showPeriodKey); assertEquals(48, s.keyboardRaise)
+        assertEquals(0, KeyboardSettings.load { if (it == Keys.KEYBOARD_RAISE) -5 else null }.keyboardRaise)
+    }
+
     @Test fun deviceToDeviceRoundTripThroughFile() {
-        val a = mapOf<String, Any?>("teencode" to true, "rowHeightAdjust" to -2,
+        val a = mapOf<String, Any?>("teencode" to true, "rowHeightAdjust" to -2, Keys.KEYBOARD_RAISE to 16, Keys.SHOW_PERIOD_KEY to true,
             BackupPrefs.SHORTCUTS_KEY to BackupPrefs.shortcutsToPref(mapOf("vn" to "Việt Nam")))
         val json = BackupCodec.encode(BackupPrefs.snapshot({ a[it] }, listOf(TemplateItem("x", "một")), null))
         val b = HashMap<String, Any?>()

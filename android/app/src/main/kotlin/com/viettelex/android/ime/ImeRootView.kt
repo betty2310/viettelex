@@ -25,6 +25,14 @@ class ImeRootView(
 
     private var navInset = 0
 
+    /**
+     * "Nâng bàn phím" (#112): đệm nền dưới hàng phím đáy, CỘNG thêm vào đệm điều hướng —
+     * chỉ là nền (ảnh nền / màu theme phủ cả khung), không view con nên chạm vào bị nuốt ở
+     * cửa sổ IME (touchableInsets = CONTENT), không rơi xuống app. 0 ⇒ y như cũ.
+     */
+    var raisePx = 0
+        set(v) { val c = v.coerceAtLeast(0); if (c != field) { field = c; requestLayout() } }
+
     /** Ảnh nền (null = không dùng) — vẽ trong onDraw: bitmap center-crop + lớp phủ phẳng. */
     private val wallpaperFile: java.io.File? =
         if (theme.palette.wallpaper) java.io.File(context.filesDir, com.viettelex.keyboard.Keys.WALLPAPER_FILE) else null
@@ -129,7 +137,7 @@ class ImeRootView(
         val w = MeasureSpec.getSize(widthMeasureSpec)
         val keyH = keyboard.keyAreaPx.roundToInt()
         val s = stripPx()
-        val h = ImeInsets.totalHeight(s, keyH, navInset)
+        val h = ImeInsets.totalHeight(s, keyH, navInset + raisePx)
         keyboard.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(keyH, MeasureSpec.EXACTLY))
         strip.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(strip.viewHeightPx(), MeasureSpec.EXACTLY))

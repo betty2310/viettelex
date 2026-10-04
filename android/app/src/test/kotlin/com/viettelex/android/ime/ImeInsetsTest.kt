@@ -27,6 +27,19 @@ class ImeInsetsTest {
         assertEquals(0, ImeInsets.bottomPad(35, -5, 0, 0, insetsKnown = false))
     }
 
+    @Test fun keyboardRaiseAddsBackgroundPadBelowKeys() {
+        // #112: 0 ⇒ không tốn gì; dp → px làm tròn; kẹp 0…48 dp.
+        assertEquals(0, ImeInsets.raisePx(0, 2.625f))
+        assertEquals(63, ImeInsets.raisePx(24, 2.625f))
+        assertEquals(126, ImeInsets.raisePx(48, 2.625f))
+        assertEquals(126, ImeInsets.raisePx(200, 2.625f))
+        assertEquals(0, ImeInsets.raisePx(-8, 2.625f))
+        // Nâng cộng dồn trên đệm nav bar: cả khung cao thêm đúng raisePx, vùng phím không đổi.
+        val nav = ImeInsets.bottomPad(35, 126, 126, 132, insetsKnown = true)
+        val raise = ImeInsets.raisePx(24, 2.625f)
+        assertEquals(ImeInsets.totalHeight(89, 588, nav) + raise, ImeInsets.totalHeight(89, 588, nav + raise))
+    }
+
     @Test fun totalHeight() {
         // 34 strip + 218 phím + 48 dải nút hệ thống (dp = px)
         assertEquals(300, ImeInsets.totalHeight(34, 218, 48))

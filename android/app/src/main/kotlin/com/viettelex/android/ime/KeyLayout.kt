@@ -95,6 +95,8 @@ data class LayoutConfig(
     val oneHand: OneHandSide = OneHandSide.OFF,
     /** Bảng sửa văn bản có hàng công cụ văn bản cuối (PlusGate TEXT_TOOLS). */
     val editTools: Boolean = false,
+    /** "Hiện phím dấu chấm cạnh phím cách" (Settings, mặc định TẮT) — xem [KeyLayout.hasPeriodKey]. */
+    val periodKey: Boolean = false,
 )
 
 object KeyLayout {
@@ -141,6 +143,16 @@ object KeyLayout {
 
     fun stripDp(suggestionsEnabled: Boolean, collapsed: Boolean): Float =
         if (!suggestionsEnabled) 0f else if (collapsed) COLLAPSED_STRIP else OPEN_STRIP
+
+    /**
+     * Hàng đáy có phím "." cạnh space? Plane chữ ô thường: KHÔNG (issue #113 — space rộng
+     * hơn; "." = space đôi → ". " hoặc plane 123), trừ khi bật [LayoutConfig.periodKey].
+     * Luôn có: ô URL / email (giữ "." ra đuôi tên miền), tablet (không có space đôi → ". "),
+     * plane số / ký hiệu / mẫu câu.
+     */
+    fun hasPeriodKey(c: LayoutConfig): Boolean =
+        c.plane != Plane.LETTERS || c.periodKey || c.tablet ||
+            c.kind == InputKind.URL || c.kind == InputKind.EMAIL
 
     private val ROW1 = "qwertyuiop"
     private val ROW2 = "asdfghjkl"
@@ -256,8 +268,8 @@ object KeyLayout {
     }
 
     /**
-     * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10]
-     * [enter 0.15][ẩn 0.07 tablet]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
+     * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10?]
+     * [enter 0.15] ("." theo [hasPeriodKey])[ẩn 0.07 tablet]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
      * phím ".com" riêng — space rộng như stock, đuôi tên miền ở giữ "." — DomainPopup).
      * Hệ số nhân với bề ngang CẢ hàng.
      */
@@ -283,7 +295,7 @@ object KeyLayout {
         slots += if (clearInsteadOfEmoji) Slot(KeyKind.CLEAR, "", "", 0.10f)
                  else Slot(KeyKind.EMOJI, "", "", 0.10f)
         slots += Slot(KeyKind.SPACE, "", " ", -1f)
-        slots += Slot(KeyKind.PUNCT, ".", ".", 0.10f)
+        if (hasPeriodKey(c)) slots += Slot(KeyKind.PUNCT, ".", ".", 0.10f)
         slots += Slot(KeyKind.RETURN, c.returnLabel, "\n", 0.15f)
         if (c.tablet) slots += Slot(KeyKind.DISMISS, "", "", 0.07f)
         var fixed = 0f

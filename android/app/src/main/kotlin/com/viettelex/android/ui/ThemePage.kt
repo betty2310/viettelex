@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.viettelex.keyboard.KeyboardSettings
 import com.viettelex.keyboard.KeyboardTheme
 import com.viettelex.keyboard.KeyboardTransparency
 import com.viettelex.keyboard.Keys
@@ -258,9 +259,12 @@ fun ThemePage(onBack: () -> Unit) {
     val active = s.wallpaperActive(wall != null)
     val pal = (s.effectiveTheme.palette(dark) ?: previewPalette(KeyboardTheme.SYSTEM, dark)).let { if (active) it.overWallpaper() else it }
         .withTransparency(s.keyboardTransparency, s.labelTransparency, dark)
+    val raise by rememberIntPref(Keys.KEYBOARD_RAISE, Prefs.D.keyboardRaise)
     VTSection(footer = tr("Áp dụng lần mở bàn phím kế tiếp.")) {
+        // Nâng bàn phím: khung cao thêm đúng tỉ lệ thu nhỏ của bản xem trước, phím giữ cỡ.
+        val raisePreview = raise * PREVIEW_SCALE
         KeyboardPreview(pal, if (active) wall else null, s.dim, large = true, backdrop = KeyboardTransparency.systemBackdrop(dark),
-            modifier = Modifier.fillMaxWidth().height(180.dp))
+            modifier = Modifier.fillMaxWidth().height(180.dp + raisePreview.dp), bottomPadDp = raisePreview)
     }
 
     if (!ThemeGate.allowsWallpaper) {
@@ -365,6 +369,8 @@ fun ThemePage(onBack: () -> Unit) {
             IosStepper(adj, -10..10) { adj = it }
         }
         RowDivider()
+        KeyboardRaiseRow()
+        RowDivider()
         BoolToggle(Keys.SHOW_SPACE_LOGO, Prefs.D.showSpaceLogo, tr("Hiện logo Vᴛ"), tr("Logo mờ ở góc phải phím cách."))
     }
 
@@ -398,10 +404,32 @@ fun ThemePage(onBack: () -> Unit) {
 /** Ảnh đưa vào trình chỉnh ảnh nền. */
 private data class EditorInput(val image: Bitmap, val crop: WallpaperCrop?, val isNew: Boolean)
 
-/** Bàn phím thu nhỏ vẽ bằng đúng token theme. [keysOnly]: chỉ phím (lớp phủ trình chỉnh ảnh nền). */
+/** Bản xem trước ≈ 0.7 cỡ bàn phím thật (180 dp cho ~258 dp phím + strip). */
+private const val PREVIEW_SCALE = 0.7f
+
+/**
+ * "Nâng bàn phím" (#112): thanh trượt 0…48 dp (bước 4) — đệm nền dưới hàng phím đáy để
+ * bàn phím nằm cao hơn (ngón cái dễ với, tránh thanh cử chỉ). Bản xem trước trên trang cao theo.
+ */
+@Composable
+private fun KeyboardRaiseRow() {
+    val c = LocalVT.current
+    var raise by rememberIntPref(Keys.KEYBOARD_RAISE, Prefs.D.keyboardRaise)
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(tr("Nâng bàn phím"), style = VTType.body, color = c.label)
+        Text(if (raise == 0) tr("Tắt") else tr("Cao hơn %d dp", raise), style = VTType.footnote, color = c.secondary)
+        Slider(value = raise.toFloat(), valueRange = 0f..KeyboardSettings.KEYBOARD_RAISE_MAX.toFloat(),
+            steps = KeyboardSettings.KEYBOARD_RAISE_MAX / 4 - 1,
+            onValueChange = { raise = KeyboardSettings.clampRaise(Math.round(it / 4) * 4) })
+        Text(tr("Thêm khoảng trống dưới hàng phím cuối để bàn phím nằm cao hơn."), style = VTType.footnote, color = c.secondary)
+    }
+}
+
+/** Bàn phím thu nhỏ vẽ bằng đúng token theme. [keysOnly]: chỉ phím (lớp phủ trình chỉnh ảnh nền).
+ *  [bottomPadDp]: dải nền trống dưới hàng phím đáy (xem trước "Nâng bàn phím"). */
 @Composable
 internal fun KeyboardPreview(p: ThemePalette, wallpaper: ImageBitmap?, dim: Int, large: Boolean, modifier: Modifier,
-                             backdrop: Int? = null, keysOnly: Boolean = false) {
+                             backdrop: Int? = null, keysOnly: Boolean = false, bottomPadDp: Float = 0f) {
     Box(modifier) {
         val bottom = p.bgBottom
         if (!keysOnly) Canvas(Modifier.fillMaxSize()) {
@@ -419,7 +447,7 @@ internal fun KeyboardPreview(p: ThemePalette, wallpaper: ImageBitmap?, dim: Int,
             val gap = if (large) 5.dp.toPx() else 2.dp.toPx()
             val r = if (large) 6.dp.toPx() else 2.dp.toPx()
             val kw = (size.width - pad * 2 - gap * 9) / 10
-            val kh = (size.height - pad * 2 - gap * 3) / 4
+            val kh = (size.height - bottomPadDp.dp.toPx() - pad * 2 - gap * 3) / 4
             fun key(x: Float, y: Float, w: Float, fill: Int) {
                 drawRoundRect(Color(fill), Offset(x, y), Size(w, kh), CornerRadius(r))
                 p.keyBorder?.let { drawRoundRect(Color(it), Offset(x, y), Size(w, kh), CornerRadius(r), style = Stroke(1.dp.toPx())) }

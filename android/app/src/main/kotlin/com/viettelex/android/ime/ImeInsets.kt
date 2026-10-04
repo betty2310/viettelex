@@ -21,6 +21,10 @@ object ImeInsets {
         return if (insetsKnown) 0 else maxOf(fallbackNavBar, 0)
     }
 
+    /** "Nâng bàn phím" dp (kẹp 0…KEYBOARD_RAISE_MAX) → px làm tròn; cộng vào [bottomPad]. */
+    fun raisePx(raiseDp: Int, density: Float): Int =
+        Math.round(com.viettelex.keyboard.KeyboardSettings.clampRaise(raiseDp) * density)
+
     /** Tổng chiều cao input view. */
     fun totalHeight(strip: Int, keyArea: Int, bottomPad: Int) = strip + keyArea + bottomPad
 }
