@@ -6,6 +6,19 @@ package com.viettelex.android.ime
  * (StripView không vẽ slot khi thẻ hiện). Pinned by StripGeometryTest.
  */
 object StripGeometry {
+    /** Chiều cao pill (thẻ Dán, chip số, Khôi phục) và ô nhấn slot, dp. */
+    const val PILL_H = 32f
+    /** Icon thanh công cụ khi mở (☰ mẫu câu, con trỏ, 📋), dp; ⌄ nhỏ hơn 2 dp. */
+    const val ICON_OPEN = 22f
+    /** Icon khi thu gọn (hàng nổi 14 dp). */
+    const val ICON_COLLAPSED = 14f
+    /** Cỡ chữ gợi ý (sp) — Gboard ~16–17; giữa đậm vừa. */
+    const val WORD_SP = 17f
+
+    /** Cỡ icon nội suy theo độ mở [o] (0 thu gọn … 1 mở); [delta] = bớt so với [ICON_OPEN]. */
+    fun iconDp(o: Float, delta: Float = 0f): Float =
+        ICON_COLLAPSED + (ICON_OPEN - delta - ICON_COLLAPSED) * o.coerceIn(0f, 1f)
+
     /** Mép trái/phải slot i (0..2) trong [barL, barR] → ghi vào [l]/[r]. */
     fun thirds(barL: Float, barR: Float, l: FloatArray, r: FloatArray) {
         val third = (barR - barL) / 3f

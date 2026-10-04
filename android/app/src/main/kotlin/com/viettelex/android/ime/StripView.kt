@@ -77,16 +77,16 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     private var lastSig = ""
     private var lastSet: SuggestionSet? = null
 
-    private val wordPaint = TextPaint(theme.text(16f))
+    private val wordPaint = TextPaint(theme.text(StripGeometry.WORD_SP))
     private val wordOff = theme.centerOffset(wordPaint)
     /** Gboard nhấn mạnh gợi ý giữa (medium). */
-    private val wordCenterPaint = TextPaint(theme.text(16f, medium = true))
+    private val wordCenterPaint = TextPaint(theme.text(StripGeometry.WORD_SP, medium = true))
     private val wordCenterOff = theme.centerOffset(wordCenterPaint)
-    private val emojiPaint = theme.text(20f)
+    private val emojiPaint = theme.text(22f)
     private val emojiOff = theme.centerOffset(emojiPaint)
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val pasteTitle = theme.text(14f, medium = true, align = Paint.Align.LEFT)
-    private val pasteSub = theme.text(12f, color = theme.withAlpha(theme.ink, 0.7f), align = Paint.Align.LEFT)
+    private val pasteTitle = theme.text(15f, medium = true, align = Paint.Align.LEFT)
+    private val pasteSub = theme.text(13f, color = theme.withAlpha(theme.ink, 0.7f), align = Paint.Align.LEFT)
     private val pasteTitleText = tr("Dán")
     private val pasteSubText = tr("Nội dung vừa copy")
     private var pasteIconCx = 0f; private var pasteTextX = 0f; private var pasteSubX = 0f
@@ -105,7 +105,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     private var actionPill: BarChip? = null
     private val restoreDefault = "↩\uFE0E " + tr("Khôi phục")
     private var restoreText = restoreDefault
-    private val chipText = TextPaint(theme.text(14f, medium = true))
+    private val chipText = TextPaint(theme.text(15f, medium = true))
     private val chipTextOff = theme.centerOffset(chipText)
 
     // --- touch ---
@@ -254,9 +254,9 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
 
     /** Chip clipboard kiểu Gboard: pill màu secondary container giữa bar, icon + "Dán" + mô tả. */
     private fun layoutPaste() {
-        val cy = theme.dp(KeyLayout.BAR_TOP_PAD + 10f)
-        val h = theme.dp(28f)
-        val icon = theme.dp(16f); val gap = theme.dp(6f); val padH = theme.dp(12f)
+        val cy = theme.dp(KeyLayout.BAR_CY)
+        val h = theme.dp(StripGeometry.PILL_H)
+        val icon = theme.dp(18f); val gap = theme.dp(6f); val padH = theme.dp(12f)
         val tW = pasteTitle.measureText(pasteTitleText); val sW = pasteSub.measureText(pasteSubText)
         val maxW = maxOf(0f, width - 2 * sideW())
         var total = padH + icon + gap + tW + gap + sW + padH
@@ -307,27 +307,27 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         val o = openness
         // Icon toolbar kiểu Gboard ở đúng vị trí ☰/⌄ cũ: nội suy giữa vị trí nổi (thu gọn)
         // và vị trí zone (mở).
-        val cyOpen = theme.dp(KeyLayout.BAR_TOP_PAD + 10f)
+        val cyOpen = theme.dp(KeyLayout.BAR_CY)
         val cyFloat = theme.dp(7f)
         val cy = cyFloat + (cyOpen - cyFloat) * o
         if (templatesEnabled) {
             val bx = theme.dp(32f) + (theme.dp(26f) - theme.dp(32f)) * o
             val active = plane == Plane.TEMPLATES && o > 0.5f
-            if (active) c.drawCircle(bx, cy, theme.dp(15f), chipPaint)
+            if (active) c.drawCircle(bx, cy, theme.dp(18f), chipPaint)
             iconPaint.color = theme.withAlpha(theme.ink, if (active) 1f else 0.75f)
-            ImeIcons.draw(c, ImeIcons.GRID, bx, cy, theme.dp(14f + 4f * o), iconPaint)
+            ImeIcons.draw(c, ImeIcons.GRID, bx, cy, theme.dp(StripGeometry.iconDp(o)), iconPaint)
         }
         run {
             // Icon con trỏ (bảng sửa văn bản) cạnh ô mẫu câu.
             val ex = theme.dp(88f) + (theme.dp(KeyLayout.STRIP_ZONE_W + STRIP_TOOL_W / 2) - theme.dp(88f)) * o
             val active = plane == Plane.EDIT && o > 0.5f
-            if (active || pressed == T_EDIT) c.drawCircle(ex, cy, theme.dp(15f), chipPaint)
+            if (active || pressed == T_EDIT) c.drawCircle(ex, cy, theme.dp(18f), chipPaint)
             iconPaint.color = theme.withAlpha(theme.ink, if (active) 1f else 0.75f)
-            ImeIcons.draw(c, ImeIcons.CURSOR, ex, cy, theme.dp(14f + 4f * o), iconPaint)
+            ImeIcons.draw(c, ImeIcons.CURSOR, ex, cy, theme.dp(StripGeometry.iconDp(o)), iconPaint)
         }
         val chx = (w - theme.dp(24f)) + (theme.dp(24f) - theme.dp(26f)) * o
         iconPaint.color = theme.withAlpha(theme.ink, 0.75f)
-        ImeIcons.draw(c, ImeIcons.CHEVRON_DOWN, chx, cy, theme.dp(14f + 2f * o), iconPaint, rotationDeg = 180f * (1f - o))
+        ImeIcons.draw(c, ImeIcons.CHEVRON_DOWN, chx, cy, theme.dp(StripGeometry.iconDp(o, delta = 2f)), iconPaint, rotationDeg = 180f * (1f - o))
         drawExtras(c, w, cy, o)
         if (o <= 0f || collapsed && anim == null) return
         val alpha = (255 * o).toInt()
@@ -336,7 +336,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         actionPill?.let { drawChip(c, it.label, alpha, TextUtils.TruncateAt.END); return }
         if (paste) { drawPaste(c, alpha); return }
         val barCy = cyOpen
-        val hh = theme.dp(14f); val inset = theme.dp(2f)
+        val hh = theme.dp(StripGeometry.PILL_H / 2); val inset = theme.dp(2f)
         if (pressed == T_SLOT) {
             val i = pressedIndex
             c.drawRoundRect(slotL[i] + inset, barCy - hh, slotR[i] - inset, barCy + hh, hh, hh, pressPaint)
@@ -377,16 +377,16 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         var x = zoneL
         if (clipButton) {
             val cx = x - theme.dp(CLIP_W) / 2
-            if (clipOpen && o > 0.5f) c.drawCircle(cx, cy, theme.dp(15f), chipPaint)
+            if (clipOpen && o > 0.5f) c.drawCircle(cx, cy, theme.dp(18f), chipPaint)
             iconPaint.color = theme.withAlpha(theme.ink, if (clipOpen) 1f else 0.75f)
-            ImeIcons.draw(c, ImeIcons.CLIPBOARD, cx, cy, theme.dp(14f + 3f * o), iconPaint)
+            ImeIcons.draw(c, ImeIcons.CLIPBOARD, cx, cy, theme.dp(StripGeometry.iconDp(o, delta = 1f)), iconPaint)
         }
     }
 
     /** Pill giữa bar (cùng kiểu thẻ Dán) cho xem trước vuốt ⌫ / Khôi phục. */
     private fun drawChip(c: Canvas, text: String, alpha: Int, trunc: TextUtils.TruncateAt) {
-        val cy = theme.dp(KeyLayout.BAR_TOP_PAD + 10f)
-        val padH = theme.dp(14f); val h = theme.dp(28f)
+        val cy = theme.dp(KeyLayout.BAR_CY)
+        val padH = theme.dp(14f); val h = theme.dp(StripGeometry.PILL_H)
         val maxW = maxOf(0f, width - 2 * sideW() - 2 * padH)
         val t = TextUtils.ellipsize(text, chipText, maxW, trunc).toString()
         val w = chipText.measureText(t) + 2 * padH
@@ -404,7 +404,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         c.drawRoundRect(pasteL, pasteT, pasteR, pasteB, r, r, chipPaint)
         chipPaint.alpha = 255
         iconPaint.color = theme.withAlpha(theme.ink, alpha / 255f)
-        ImeIcons.draw(c, ImeIcons.CLIPBOARD, pasteIconCx, pasteIconCy, theme.dp(16f), iconPaint)
+        ImeIcons.draw(c, ImeIcons.CLIPBOARD, pasteIconCx, pasteIconCy, theme.dp(18f), iconPaint)
         pasteTitle.alpha = alpha
         c.drawText(pasteTitleText, pasteTextX, pasteTitleBase, pasteTitle)
         if (pasteShowSub) {

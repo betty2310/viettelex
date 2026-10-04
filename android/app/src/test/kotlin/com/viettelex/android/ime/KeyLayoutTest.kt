@@ -25,7 +25,7 @@ class KeyLayoutTest {
         near(KeyLayout.keyAreaDp(true, true, 0), 300f)
         near(KeyLayout.keyAreaDp(false, false, 10), 264f)
         near(KeyLayout.keyAreaDp(false, false, -99), 184f)       // kẹp −10
-        near(KeyLayout.stripDp(true, false), 34f)
+        near(KeyLayout.stripDp(true, false), 42f)   // #112: tỉ lệ Gboard
         near(KeyLayout.stripDp(true, true), 14f)
         near(KeyLayout.stripDp(false, false), 0f)
         // Dải giữ theo công tắc toàn cục: ô mật khẩu/URL (không gợi ý) cao bằng ô thường (port iOS e72ae43).
@@ -33,7 +33,7 @@ class KeyLayoutTest {
             val normal = KeyLayout.stripDp(KeyLayout.stripReserved(true), collapsed)
             val noSuggestField = KeyLayout.stripDp(KeyLayout.stripReserved(showSuggestionsSetting = true), collapsed)
             near(noSuggestField, normal)
-            near(normal, if (collapsed) 14f else 34f)
+            near(normal, if (collapsed) 14f else 42f)
         }
         near(KeyLayout.stripDp(KeyLayout.stripReserved(false), false), 0f)
     }

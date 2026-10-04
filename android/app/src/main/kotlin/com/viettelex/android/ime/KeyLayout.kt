@@ -108,9 +108,11 @@ object KeyLayout {
     const val BOTTOM_ROW_TOP = ROW_MARGIN_V
     const val BOTTOM_ROW_BOTTOM = ROW_MARGIN_V
     const val KEY_RADIUS = 7f
-    const val OPEN_STRIP = 34f
+    /** Strip gợi ý mở — tỉ lệ Gboard (~0.75 hàng phím 56 dp; #112: 34 dp trông mỏng, lệch). */
+    const val OPEN_STRIP = 42f
     const val COLLAPSED_STRIP = 14f
-    const val BAR_TOP_PAD = 4f
+    /** Tâm dọc nội dung bar (chữ gợi ý, pill, icon) khi mở: gần giữa dải, nhích lên 1 dp. */
+    const val BAR_CY = OPEN_STRIP / 2 - 1f
     const val STRIP_ZONE_W = 52f
 
     /** Hàng số thấp hơn hàng chữ như Gboard — bàn phím cao thêm ít. */
