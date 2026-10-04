@@ -87,6 +87,20 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// M2 suggestion bar: gate qua toggle showSuggestions trong app.
     var onSuggestion: ((String) -> Void)?
     private var heightConstraint: NSLayoutConstraint?
+    /// Chiều cao tự xin (KeyLayout.chrome total) — CHƯA cộng hostFillExtra.
+    private(set) var baseRequestedHeight: CGFloat = 0
+    /// Phần xin thêm để lấp dải container hệ thống lộ phía trên view (HostFill — controller
+    /// quyết định). Phím hấp thụ (rowsHeight @900), strip/headroom balloon giữ nguyên.
+    var hostFillExtra: CGFloat = 0 {
+        didSet { if hostFillExtra != oldValue { updateSuggestionChrome() } }
+    }
+    /// Nền theme đục / ảnh nền đang vẽ (dải kính hệ thống lộ ra mới thấy khác màu).
+    var paintsBackdrop: Bool { !themeBackdrop.isHidden || wallpaperActive }
+    /// Debug log: constant + priority của constraint chiều cao xin host.
+    var heightRequestInfo: String {
+        guard let h = heightConstraint else { return "-" }
+        return "\(h.constant)@\(Int(h.priority.rawValue)) base=\(baseRequestedHeight) fill=\(hostFillExtra)"
+    }
     private let suggestionBar = SuggestionBar()
     private var suggestionsEnabled = false
     private var stripReserved = false
@@ -318,7 +332,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             let strip: CGFloat = collapsing ? 14 : Self.openStrip
             let c = KeyLayout.chrome(keyArea: self.keyAreaHeight(), strip: strip, mode: self.chromeMode)
             self.rowsTopConstraint?.constant = c.rowsTop
-            self.heightConstraint?.constant = c.total
+            self.heightConstraint?.constant = c.total + self.hostFillExtra
             self.suggestionBar.alpha = collapsing ? 0 : 1
             let flip = CGAffineTransform(rotationAngle: collapsing ? .pi : 0)
             self.chevronIcon?.transform = flip
@@ -629,7 +643,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // Tìm emoji: ô tìm thế chỗ strip, phím chữ giữ đủ keyArea (KeyLayout.chrome).
         let c = KeyLayout.chrome(keyArea: keyAreaHeight(), strip: strip, mode: chromeMode)
         if rowsTopConstraint?.constant != c.rowsTop { rowsTopConstraint?.constant = c.rowsTop }
-        if heightConstraint?.constant != c.total { heightConstraint?.constant = c.total }
+        baseRequestedHeight = c.total
+        let total = c.total + hostFillExtra
+        if heightConstraint?.constant != total { heightConstraint?.constant = total }
         if rowsHeightConstraint?.constant != c.rows { rowsHeightConstraint?.constant = c.rows }
         if rowsMinHeightConstraint?.constant != c.rows { rowsMinHeightConstraint?.constant = c.rows }
         if rowsMinTopConstraint?.constant != c.minTop { rowsMinTopConstraint?.constant = c.minTop }

@@ -249,3 +249,76 @@ enum KeyLayout {
         return w - 2 * margin - gap * CGFloat(row.count - 1) - fixed
     }
 }
+
+// MARK: Khung hệ thống cao hơn input view (Phil 05/10/2026, iPhone thật iOS 27, WhatsApp,
+// theme đen): thỉnh thoảng một dải kính xám bo góc ~15–20pt lộ RA TRÊN nền đen của mình —
+// container (superview/window) hệ thống cấp cho bàn phím cao hơn input view, view mình neo
+// đáy. Sửa: xin cao thêm ĐÚNG phần hệ thống đã cấp (phím hấp thụ như khi host cấp dư) —
+// không bao giờ xin hơn mức đã cấp, chờ một lượt layout xác nhận (bỏ khung tạm lúc xoay /
+// animation hiện), và nếu container lại cao vượt mức đã xin (dấu hiệu vòng lặp "xin thêm →
+// cấp thêm → …") thì trả về 0 và khoá tới lần hiện sau.
+
+/// Quyết định thuần (unit-test được) cho việc lấp dải container hệ thống phía trên view.
+struct HostFill {
+    enum Decision: Equatable {
+        case none                 // không làm gì
+        case wait                 // thấy khoảng hở — chờ lượt layout sau xác nhận
+        case apply(CGFloat)       // đặt phần xin thêm (pt) = giá trị này
+    }
+    /// Trần phần xin thêm: dải quan sát ~15–20pt; khung khổng lồ lúc host settle / window cỡ
+    /// màn hình vượt trần ⇒ bỏ qua (không bao giờ kéo bàn phím cao vô hạn).
+    static let maxExtra: CGFloat = 48
+    /// Sai số làm tròn pixel.
+    static let tolerance: CGFloat = 1
+
+    private(set) var extra: CGFloat = 0
+    /// Đã thấy dấu hiệu vòng lặp — tắt tới reset().
+    private(set) var locked = false
+    private var pending: CGFloat?
+    private var width: CGFloat = 0
+
+    /// Lần hiện mới: về trạng thái gốc (không xin thêm).
+    mutating func reset() { self = HostFill() }
+
+    /// Khoảng từ đỉnh container tới đáy view (toạ độ container) nếu view NEO ĐÁY container;
+    /// nil nếu không neo đáy (không phải dải phía trên) hoặc chưa có hình học.
+    static func allocated(viewFrame: CGRect, container: CGRect) -> CGFloat? {
+        guard viewFrame.height > 0, container.height > 0,
+              abs(container.maxY - viewFrame.maxY) < tolerance else { return nil }
+        return viewFrame.maxY - container.minY
+    }
+
+    /// - base: chiều cao bàn phím tự xin (KeyLayout.chrome total, CHƯA cộng extra).
+    /// - viewHeight: chiều cao view thật hệ thống cấp (có thể > mức xin — phím hấp thụ).
+    /// - allocated: đỉnh container → đáy view (`allocated(viewFrame:container:)`), nil = không biết.
+    /// - animating: đang animation hiện/xoay ⇒ khung tạm, chỉ chờ.
+    mutating func observe(base: CGFloat, viewHeight: CGFloat, allocated: CGFloat?,
+                          width: CGFloat, animating: Bool) -> Decision {
+        if width != self.width {
+            // Xoay / Split View: hình học mới hoàn toàn — bỏ phần xin thêm cũ.
+            let had = extra
+            self.width = width; pending = nil; extra = 0
+            if had != 0 { return .apply(0) }
+        }
+        guard !locked, let allocated, base > 0, viewHeight > 0 else { pending = nil; return .none }
+        let band = allocated - viewHeight
+        guard band >= Self.tolerance else { pending = nil; return .none }   // không hở: giữ nguyên
+        if extra > 0 {
+            pending = nil
+            // Container cao HƠN cả mức đã xin ⇒ nó chạy theo mức xin (vòng lặp) — trả về
+            // như cũ, khoá. Còn trong mức đã xin = hệ thống chưa kịp cấp lại view: chờ.
+            guard allocated - (base + extra) >= Self.tolerance else { return .none }
+            locked = true; extra = 0
+            return .apply(0)
+        }
+        if animating { pending = nil; return .wait }
+        let target = (allocated - base).rounded()
+        guard target > 0, target <= Self.maxExtra else { pending = nil; return .none }
+        if let p = pending, abs(p - allocated) < Self.tolerance {
+            pending = nil; extra = target
+            return .apply(target)
+        }
+        pending = allocated
+        return .wait
+    }
+}

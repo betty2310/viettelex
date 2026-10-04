@@ -116,6 +116,132 @@ final class KeyboardHeightTests: XCTestCase {
     }
 }
 
+/// Regression (Phil 05/10/2026, iPhone thật iOS 27, WhatsApp, theme đen): dải kính xám bo góc
+/// lộ phía trên nền mình — container hệ thống cao hơn view. HostFill xin thêm ĐÚNG phần đã cấp,
+/// có xác nhận một lượt, không bao giờ thành vòng lặp tăng dần.
+final class HostFillTests: XCTestCase {
+    private let base: CGFloat = 252, width: CGFloat = 402
+
+    func testAllocatedOnlyWhenBottomAnchored() {
+        let container = CGRect(x: 0, y: 0, width: 402, height: 270)
+        XCTAssertEqual(HostFill.allocated(viewFrame: CGRect(x: 0, y: 18, width: 402, height: 252),
+                                          container: container), 270)
+        XCTAssertNil(HostFill.allocated(viewFrame: CGRect(x: 0, y: 0, width: 402, height: 252),
+                                        container: container), "neo đỉnh: không phải dải phía trên")
+        XCTAssertNil(HostFill.allocated(viewFrame: .zero, container: container))
+    }
+
+    func testNoBandDoesNothing() {
+        var f = HostFill()
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base, width: width, animating: false), .none)
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: nil, width: width, animating: false), .none)
+        // Host cấp DƯ cho chính view (container = view): không xin thêm (phím đã hấp thụ).
+        XCTAssertEqual(f.observe(base: base, viewHeight: base + 25, allocated: base + 25, width: width, animating: false), .none)
+        XCTAssertEqual(f.extra, 0)
+    }
+
+    func testBandConfirmedNextPassThenMatchesExactly() {
+        var f = HostFill()
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + 18, width: width, animating: false), .wait)
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + 18, width: width, animating: false), .apply(18))
+        // Hệ thống chưa kịp cấp lại view (vẫn hở, nhưng ≤ mức đã xin): chờ, không khoá.
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + 18, width: width, animating: false), .none)
+        XCTAssertFalse(f.locked)
+        // Cấp xong: view = container → ổn định, giữ nguyên.
+        XCTAssertEqual(f.observe(base: base, viewHeight: base + 18, allocated: base + 18, width: width, animating: false), .none)
+        XCTAssertEqual(f.extra, 18)
+    }
+
+    func testTransientSizeNotConfirmedIsIgnored() {
+        var f = HostFill()
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + 30, width: width, animating: false), .wait)
+        // Lượt sau khung đã khác (đang settle) ⇒ chờ tiếp, không áp số cũ.
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + 12, width: width, animating: false), .wait)
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base, width: width, animating: false), .none)
+        XCTAssertEqual(f.extra, 0)
+    }
+
+    func testAnimationOnlyWaits() {
+        var f = HostFill()
+        for _ in 0..<3 {
+            XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + 18, width: width, animating: true), .wait)
+        }
+        XCTAssertEqual(f.extra, 0)
+    }
+
+    func testHugeOrNegativeAllocationIgnored() {
+        var f = HostFill()
+        for _ in 0..<3 {
+            XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + HostFill.maxExtra + 40,
+                                     width: width, animating: false), .none)
+        }
+        XCTAssertEqual(f.extra, 0)
+    }
+
+    /// Vòng lặp: container luôn = mức xin + 18 ⇒ tối đa MỘT lần xin thêm rồi trả về 0 và khoá.
+    func testFeedbackLoopLocksAfterOneGrow() {
+        var f = HostFill()
+        var requested = base
+        var applies = 0
+        for _ in 0..<20 {
+            let allocated = requested + 18          // hệ thống "chạy theo" mức xin
+            switch f.observe(base: base, viewHeight: requested, allocated: allocated, width: width, animating: false) {
+            case .apply(let x): applies += 1; requested = base + x
+            case .wait, .none: break
+            }
+        }
+        XCTAssertTrue(f.locked)
+        XCTAssertEqual(f.extra, 0)
+        XCTAssertEqual(requested, base, "trả về mức xin gốc")
+        XCTAssertLessThanOrEqual(applies, 2)
+        XCTAssertLessThanOrEqual(requested, base + HostFill.maxExtra)
+    }
+
+    func testNeverRequestsBeyondAllocated() {
+        for gap: CGFloat in [1, 5, 18, 30, HostFill.maxExtra] {
+            var f = HostFill()
+            _ = f.observe(base: base, viewHeight: base, allocated: base + gap, width: width, animating: false)
+            let d = f.observe(base: base, viewHeight: base, allocated: base + gap, width: width, animating: false)
+            XCTAssertEqual(d, .apply(gap), "gap \(gap)")
+            XCTAssertLessThanOrEqual(base + f.extra, base + gap)
+        }
+    }
+
+    func testRotationAndResetDropExtra() {
+        var f = HostFill()
+        _ = f.observe(base: base, viewHeight: base, allocated: base + 18, width: width, animating: false)
+        XCTAssertEqual(f.observe(base: base, viewHeight: base, allocated: base + 18, width: width, animating: false), .apply(18))
+        XCTAssertEqual(f.observe(base: 172, viewHeight: 172, allocated: 172, width: 874, animating: false), .apply(0))
+        XCTAssertEqual(f.extra, 0)
+        f.reset()
+        XCTAssertFalse(f.locked)
+    }
+
+    /// Phần xin thêm cộng vào mức xin; strip / headroom balloon giữ nguyên, phím hấp thụ.
+    @MainActor func testExtraRaisesRequestKeepsStrip() throws {
+        let kb = KeyboardView(needsGlobe: false, inputController: nil) { _ in }
+        let host = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 400))
+        host.addSubview(kb)
+        kb.frame = CGRect(x: 0, y: 0, width: 390, height: 300)
+        kb.configureInputKind(.normal)
+        kb.setSuggestionsEnabled(true)
+        kb.layoutIfNeeded()
+        let h0 = kb.debugRequestedHeight, top0 = kb.debugRowsTop
+        XCTAssertEqual(kb.baseRequestedHeight, h0)
+        kb.hostFillExtra = 18
+        XCTAssertEqual(kb.debugRequestedHeight, h0 + 18)
+        XCTAssertEqual(kb.baseRequestedHeight, h0)
+        XCTAssertEqual(kb.debugRowsTop, top0)
+        kb.frame.size.height = kb.debugRequestedHeight
+        kb.setNeedsLayout(); kb.layoutIfNeeded()
+        let rows = try XCTUnwrap(kb.debugRowFrames().first)
+        XCTAssertEqual(rows.minY, top0, accuracy: 0.5, "strip không dời")
+        kb.hostFillExtra = 0
+        XCTAssertEqual(kb.debugRequestedHeight, h0)
+        withExtendedLifetime(host) {}
+    }
+}
+
 /// Regression (Phil 30/09/2026, máy thật sau 1.2.3): giữ "e" ra "3" — balloon bị cắt nửa ở
 /// mép trên bàn phím khi KHÔNG có thanh gợi ý phía trên (tắt gợi ý / thu gọn / host cấp
 /// thiếu làm strip nhường hết). Extension không vẽ ra ngoài inputView ⇒ balloon hàng đầu

@@ -9,6 +9,10 @@ final class KeyboardViewController: UIInputViewController {
 
     private var bridge = EngineBridge()
     private var keyboard: KeyboardView!
+    /// Lấp dải container hệ thống lộ phía trên view (checkHostFill) + dedupe log hình học.
+    fileprivate var hostFill = HostFill()
+    fileprivate var hostFillRecheckScheduled = false
+    fileprivate var lastHostGeomKey = ""
     /// Model học từ cá nhân — tạo LƯỜI khi tính năng cần (thanh gợi ý / gõ vuốt / Thêm dấu).
     /// Tắt hết ⇒ không đọc userlm.plist, không seed, không giữ bảng trong RAM.
     private var langModelStorage: UserLangModel?
@@ -201,6 +205,8 @@ final class KeyboardViewController: UIInputViewController {
         if keyboard.isTornDown { installKeyboard() }
         L10n.reload()   // ngôn ngữ giao diện app (uiLanguage) — một lần mỗi lần hiện
         TouchLog.loadSetting()
+        // Lần hiện mới: không mang phần xin thêm (HostFill) của lần trước sang.
+        hostFill.reset(); keyboard.hostFillExtra = 0; lastHostGeomKey = ""
         // Đọc settings MỘT lần mỗi lần hiện (trước đây EngineBridge() tự load lần hai).
         let settings = KeyboardSettings.load()
         bridge = EngineBridge(settings: settings)     // fresh settings + buffer
@@ -254,6 +260,7 @@ final class KeyboardViewController: UIInputViewController {
         refreshFieldTraits(force: true)
         applyOneHandSetting()
         TouchLog.session(fullAccess: hasFullAccess, traits: fieldTraits?.logDescription ?? "")
+        logHostGeometry("willAppear")
         // Rung phím: cần cả toggle trong app LẪN Toàn quyền Truy cập (iOS
         // vô hiệu haptics trong extension không có Full Access).
         KeyboardView.hapticsEnabled = settings.hapticFeedback && hasFullAccess
@@ -1953,6 +1960,92 @@ extension KeyboardViewController {
         keyboard?.updateDark(AppearancePolicy.isDark(
             appearance: fieldTraits?.appearance ?? .default,
             style: view.traitCollection.userInterfaceStyle))
+        checkHostFill()
+    }
+
+    // MARK: Dải container hệ thống lộ phía trên view (HostFill — Phil 05/10/2026, iOS 27 thật)
+    // (trạng thái hostFill / hostFillRecheckScheduled / lastHostGeomKey ở thân class)
+    /// Chỉ iPhone iOS 26+ (khung kính) — chỗ khác không đo, không làm gì.
+    private static let hostFillEligible = UIDevice.current.userInterfaceIdiom == .phone
+        && ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
+
+    /// Đỉnh container hệ thống → đáy view: superview và window, chỉ những cái view NEO ĐÁY và
+    /// cao hơn view không quá trần (window cỡ màn hình / khung settle khổng lồ bị loại).
+    private func hostAllocatedHeight() -> CGFloat? {
+        guard let v = viewIfLoaded else { return nil }
+        var candidates: [CGFloat] = []
+        if let s = v.superview, let a = HostFill.allocated(viewFrame: v.frame, container: s.bounds) {
+            candidates.append(a)
+        }
+        if let w = v.window,
+           let a = HostFill.allocated(viewFrame: v.convert(v.bounds, to: w), container: w.bounds) {
+            candidates.append(a)
+        }
+        return candidates.filter { $0 - v.bounds.height <= HostFill.maxExtra }.max()
+    }
+
+    /// Mỗi lượt layout: log hình học (Debug mode) + quyết định HostFill. Theme trong suốt /
+    /// iPad / iOS < 26: chỉ một phép so sánh.
+    private func checkHostFill() {
+        guard let kb = keyboard, !kb.isTornDown else { return }
+        if TouchLog.enabled { logHostGeometry("layout") }
+        guard Self.hostFillEligible, kb.paintsBackdrop else { return }
+        let animating = UIView.inheritedAnimationDuration > 0
+            || !(view.layer.animationKeys()?.isEmpty ?? true)
+        switch hostFill.observe(base: kb.baseRequestedHeight, viewHeight: view.bounds.height,
+                                allocated: hostAllocatedHeight(), width: view.bounds.width,
+                                animating: animating) {
+        case .none: break
+        case .wait: scheduleHostFillRecheck()
+        case .apply(let x):
+            kb.hostFillExtra = x
+            TouchLog.write("hostFill extra=\(x) locked=\(hostFill.locked)")
+        }
+    }
+
+    /// Xác nhận ở lượt layout SAU (không hành động trên khung tạm của cùng một pass).
+    private func scheduleHostFillRecheck() {
+        guard !hostFillRecheckScheduled else { return }
+        hostFillRecheckScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self else { return }
+            self.hostFillRecheckScheduled = false
+            self.viewIfLoaded?.setNeedsLayout()
+        }
+    }
+
+    /// Debug mode (Giới thiệu → Gỡ lỗi): hình học view ↔ superview ↔ window ↔ màn hình, mức xin
+    /// chiều cao, safe area, trait — ghi khi ĐỔI (dedupe), để bắt dải kính hệ thống lộ phía trên.
+    private func logHostGeometry(_ tag: String) {
+        guard TouchLog.enabled, let v = viewIfLoaded, let kb = keyboard else { return }
+        let r = NSCoder.string(for:) as (CGRect) -> String
+        let ins = NSCoder.string(for:) as (UIEdgeInsets) -> String
+        var chain: [String] = []
+        var a = v.superview
+        while let s = a, chain.count < 4 {
+            chain.append("\(type(of: s)):\(r(s.bounds))")
+            a = s.superview
+        }
+        let w = v.window
+        let inWin = w.map { r(v.convert(v.bounds, to: $0)) } ?? "-"
+        let winOnScreen = w.flatMap { win in
+            win.windowScene.map { r(win.convert(win.bounds, to: $0.screen.coordinateSpace)) }
+        } ?? "-"
+        let screen = w?.windowScene.map { r($0.screen.bounds) } ?? "-"
+        let t = v.traitCollection
+        let alloc = hostAllocatedHeight()
+        let band = alloc.map { String(format: "%.1f", $0 - v.bounds.height) } ?? "-"
+        let body = "view=\(r(v.bounds)) inSuper=\(r(v.frame)) super=[\(chain.joined(separator: " > "))] "
+            + "window=\(w.map { r($0.bounds) } ?? "-") inWin=\(inWin) winOnScreen=\(winOnScreen) screen=\(screen) "
+            + "inputView=\(inputView.map { r($0.frame) } ?? "-") kb=\(r(kb.frame)) req=\(kb.heightRequestInfo) "
+            + "safe=\(ins(v.safeAreaInsets)) winSafe=\(w.map { ins($0.safeAreaInsets) } ?? "-") "
+            + "trait=style\(t.userInterfaceStyle.rawValue)/h\(t.horizontalSizeClass.rawValue)"
+            + "/v\(t.verticalSizeClass.rawValue)/x\(t.displayScale) "
+            + "alloc=\(alloc.map { "\($0)" } ?? "-") band=\(band) fillLocked=\(hostFill.locked) "
+            + "backdrop=\(kb.paintsBackdrop) host=\(parent.map { String(describing: type(of: $0)) } ?? "-")"
+        guard body != lastHostGeomKey else { return }
+        lastHostGeomKey = body
+        TouchLog.write("hostgeom[\(tag)] " + body)
     }
 
     private func isRecentEnglish(_ w: String?) -> Bool {
