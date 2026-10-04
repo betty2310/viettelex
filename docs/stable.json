@@ -41,8 +41,8 @@
     "notes": "Công cụ văn bản cho vùng chọn, giao diện tiếng Anh, icon khay Vᴛ/E, tự cập nhật một chạm, gói gộp viettelex + lệnh cài một dòng, sửa gõ dấu khi đang chọn chữ trong GTK3, gói nhỏ hơn."
   },
   "android": {
-    "version": "1.3",
-    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.3/VietTelex-android-1.3.apk",
+    "version": "1.4",
+    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.4/VietTelex-android-1.4.apk",
     "play": "https://play.google.com/store/apps/details?id=com.viettelex.android"
   }
 }

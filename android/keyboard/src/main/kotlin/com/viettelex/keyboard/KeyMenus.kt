@@ -29,31 +29,36 @@ enum class EmojiKeyAction {
     VOICE,
     /** Bật / tắt chế độ một tay (điện thoại). */
     ONE_HAND,
+    /** Bật / tắt bàn phím thả nổi (#112). */
+    FLOATING,
     /** Mở app VietTelex (cài đặt). */
     SETTINGS,
 }
 
 /**
  * Giữ 😊 ⇒ hàng icon: 🌐 đổi bàn phím (chọn sẵn — giữ rồi nhấc tại chỗ = hành vi cũ) · 🎤 ·
- * ✋ một tay · ⚙ cài đặt. Có phím 🌐 thật (needsGlobe) cũng vậy.
+ * ✋ một tay · 🪟 thả nổi · ⚙ cài đặt. Có phím 🌐 thật (needsGlobe) cũng vậy. Đang thả nổi ⇒
+ * IME truyền oneHandAvailable = false (một tay tắt khi nổi).
  */
 object EmojiKeyMenu {
     const val PRESELECT = 0
 
-    fun actions(voiceAvailable: Boolean, oneHandAvailable: Boolean): List<EmojiKeyAction> {
-        val out = ArrayList<EmojiKeyAction>(4)
+    fun actions(voiceAvailable: Boolean, oneHandAvailable: Boolean, floatingAvailable: Boolean): List<EmojiKeyAction> {
+        val out = ArrayList<EmojiKeyAction>(5)
         out += EmojiKeyAction.SWITCH_KEYBOARD
         if (voiceAvailable) out += EmojiKeyAction.VOICE
         if (oneHandAvailable) out += EmojiKeyAction.ONE_HAND
+        if (floatingAvailable) out += EmojiKeyAction.FLOATING
         out += EmojiKeyAction.SETTINGS
         return out
     }
 
-    /** Nhãn (mô tả trợ năng / debug); một tay đang bật ⇒ mục là "tắt". */
-    fun label(a: EmojiKeyAction, oneHandOn: Boolean): String = when (a) {
+    /** Nhãn (mô tả trợ năng / debug); một tay / thả nổi đang bật ⇒ mục là "tắt" / "gắn lại". */
+    fun label(a: EmojiKeyAction, oneHandOn: Boolean, floatingOn: Boolean = false): String = when (a) {
         EmojiKeyAction.SWITCH_KEYBOARD -> tr("Đổi bàn phím")
         EmojiKeyAction.VOICE -> tr("Gõ bằng giọng nói")
         EmojiKeyAction.ONE_HAND -> if (oneHandOn) tr("Tắt chế độ một tay") else tr("Chế độ một tay")
+        EmojiKeyAction.FLOATING -> if (floatingOn) tr("Gắn bàn phím xuống đáy") else tr("Thả nổi bàn phím")
         EmojiKeyAction.SETTINGS -> tr("Cài đặt VietTelex")
     }
 }

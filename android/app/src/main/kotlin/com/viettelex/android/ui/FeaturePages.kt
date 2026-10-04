@@ -108,6 +108,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Giữ phím ra ký tự đặc biệt", "ký hiệu symbol @ # giữ lâu long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh", "space ngôn ngữ english language", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Chế độ một tay", "one hand một tay", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Bàn phím thả nổi", "floating nổi kéo di chuyển float", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Phóng to chữ khi bấm", "key preview popup", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Rung phím", "haptic rung vibrate", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Âm thanh phím", "sound click tiếng âm lượng volume kiểu style gỗ cơ máy chữ bong bóng custom", FeaturePage.Phim), // l10n-key
@@ -283,6 +284,7 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
     val haptic by rememberBoolPref(Keys.HAPTIC_FEEDBACK, Prefs.D.hapticFeedback)
     val keySound by rememberBoolPref(Keys.KEY_SOUND, Prefs.D.keySound)
     val oneHand by rememberStringPref(Keys.ONE_HAND_MODE, Prefs.D.oneHandMode)
+    val floating by rememberBoolPref(Keys.FLOATING_KEYBOARD, Prefs.D.floatingKeyboard)
     val hardware by rememberBoolPref(Keys.HARDWARE_TELEX, Prefs.D.hardwareTelex)
     val clipHistory by rememberBoolPref(Keys.CLIPBOARD_HISTORY, Prefs.D.clipboardHistory)
     val incognito by rememberBoolPref(Keys.INCOGNITO, Prefs.D.incognito)
@@ -303,7 +305,7 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
             " · " + if (templatesOn) tr("Mẫu câu bật") else tr("Mẫu câu tắt")
         FeaturePage.Phim -> join(numberRow to tr("Hàng số"), periodKey to tr("Phím dấu chấm"), spaceSwipe to tr("Vuốt phím cách"),
             autoSpace to tr("Cách sau dấu câu"), haptic to tr("Rung"), keySound to tr("Âm"),
-            (oneHand != "off") to tr("Một tay"), hardware to tr("Bàn phím cứng"), none = tr("Mặc định"))
+            (oneHand != "off") to tr("Một tay"), floating to tr("Thả nổi"), hardware to tr("Bàn phím cứng"), none = tr("Mặc định"))
         FeaturePage.GiaoDien -> theme.effectiveTheme.title + (if (wallpaperOn) " · " + tr("Ảnh nền") else "") +
             if (theme.keyboardTransparency > 0 || theme.labelTransparency > 0) " · " + tr("Trong suốt") else ""
         FeaturePage.RiengTu -> (if (clipHistory) tr("Lịch sử clipboard bật") else tr("Lịch sử clipboard tắt")) +
@@ -475,7 +477,7 @@ private fun PhimPage(onBack: () -> Unit) {
             RowDivider()
         }
         BoolToggle(Keys.LONG_PRESS_SYMBOLS, Prefs.D.longPressSymbols, tr("Giữ phím hàng 2, 3 để ra ký tự đặc biệt"),
-            tr("Giữ a … l, z … m để gõ @ # \$ _ & - + ( ) … Giữ , để chọn dấu câu (. ? ! : ; …); giữ 😊 để đổi bàn phím, gõ giọng nói, một tay."))
+            tr("Giữ a … l, z … m để gõ @ # \$ _ & - + ( ) … Giữ , để chọn dấu câu (. ? ! : ; …); giữ 😊 để đổi bàn phím, gõ giọng nói, một tay, thả nổi."))
         RowDivider()
         BoolToggle(Keys.SHOW_PERIOD_KEY, Prefs.D.showPeriodKey, tr("Hiện phím dấu chấm cạnh phím cách"),
             tr("Tắt: phím cách rộng hơn — gõ dấu cách hai lần để ra \". \", hoặc dùng bàn ?123. Ô địa chỉ web, email và máy tính bảng luôn có phím dấu chấm."))
@@ -488,6 +490,9 @@ private fun PhimPage(onBack: () -> Unit) {
             tr("Vuốt nhanh phím cách sang trái/phải. Góc phím cách hiện VI / EN. Tiếng Anh gõ nguyên văn. Giữ rồi kéo vẫn là di con trỏ."))
         RowDivider()
         OneHandRow()
+        RowDivider()
+        BoolToggle(Keys.FLOATING_KEYBOARD, Prefs.D.floatingKeyboard, tr("Bàn phím thả nổi"),
+            tr("Tách bàn phím khỏi đáy màn hình thành khung nhỏ, kéo thanh dưới cùng để đặt đâu cũng được — app bên dưới vẫn chạm được, không bị che hay co lại. Bật/tắt nhanh: giữ 😊 → 🪟; nút ⤓ trên thanh kéo để gắn lại. Khi thả nổi, chế độ một tay và Nâng bàn phím tạm bỏ qua. Vị trí nhớ riêng cho màn hình dọc và ngang."))
     }
     VTSection(header = tr("Phản hồi khi chạm")) {
         BoolToggle(Keys.KEY_PREVIEW, Prefs.D.keyPreview, tr("Phóng to chữ khi bấm"), tr("Ô chữ lớn nổi trên phím vừa chạm. Tắt nếu thấy rối mắt."))

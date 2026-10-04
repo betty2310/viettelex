@@ -44,15 +44,17 @@ class ImeRootView(
     }
     private val dimColor = theme.withAlpha(theme.palette.wallpaperOverlay, theme.settings.dim / 100f * theme.palette.surfaceAlpha)
 
+    /** Nền theme (màu / gradient kính) — nền view khi dính đáy, vẽ tay trong khung khi thả nổi. */
+    private val bgDrawable: android.graphics.drawable.Drawable = theme.palette.bgBottom.let { bottom ->
+        // Kính giả lập: gradient dọc (GradientDrawable — vẽ phẳng, không blur).
+        if (wallpaperFile == null && bottom != null) android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(theme.bg, bottom))
+        else android.graphics.drawable.ColorDrawable(theme.bg)
+    }
+
     init {
-        val bottom = theme.palette.bgBottom
-        when {
-            wallpaperFile != null -> { setBackgroundColor(theme.bg); setWillNotDraw(false) }
-            // Kính giả lập: gradient dọc (GradientDrawable — vẽ phẳng, không blur).
-            bottom != null -> background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(theme.bg, bottom))
-            else -> setBackgroundColor(theme.bg)
-        }
+        background = bgDrawable
+        if (wallpaperFile != null) setWillNotDraw(false)
         isMotionEventSplittingEnabled = true
         addView(keyboard)
         addView(strip)
@@ -64,11 +66,21 @@ class ImeRootView(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        if (floating) return              // ảnh nền theo cỡ khung — onLayout lo
         recordPortraitSize(w, h)
+        loadWallpaperFor(w, h)
+    }
+
+    /** Giải ảnh nền cho vùng [w]×[h] (đồng bộ — chỉ khi đổi cỡ: xoay, đổi chế độ). */
+    private fun loadWallpaperFor(w: Int, h: Int) {
         val f = wallpaperFile ?: return
         reloadGen++
+        wallW = w; wallH = h
         setWallpaper(WallpaperBitmap.load(f, theme.settings.version, w, h, isHardwareAccelerated))
     }
+    /** Cỡ vùng ảnh nền đang dùng (view khi dính đáy, khung khi thả nổi). */
+    private var wallW = 0
+    private var wallH = 0
 
     /**
      * Cỡ thật vùng bàn phím dọc (gồm strip + đệm điều hướng) cho khung trình chỉnh ảnh nền ở
@@ -85,14 +97,20 @@ class ImeRootView(
 
     private fun setWallpaper(b: android.graphics.Bitmap?) {
         wallpaper = b
-        if (b != null) {
-            // center-crop (bitmap đã là vùng thấy được — tỉ lệ ≈ view; phần lệch làm tròn cắt nốt)
-            val w = width; val h = height
-            val s = maxOf(w.toFloat() / b.width, h.toFloat() / b.height)
-            wallMatrix.setScale(s, s)
-            wallMatrix.postTranslate((w - b.width * s) / 2f, (h - b.height * s) / 2f)
-        }
+        updateWallMatrix()
         invalidate()
+    }
+
+    /** center-crop vào vùng nền (bitmap đã là vùng thấy được — tỉ lệ ≈ vùng; phần lệch cắt nốt). */
+    private fun updateWallMatrix() {
+        val b = wallpaper ?: return
+        val x0 = if (floating) panel.left else 0
+        val y0 = if (floating) panel.top else 0
+        val w = if (floating) panel.width() else width
+        val h = if (floating) panel.height() else height
+        val s = maxOf(w.toFloat() / b.width, h.toFloat() / b.height)
+        wallMatrix.setScale(s, s)
+        wallMatrix.postTranslate(x0 + (w - b.width * s) / 2f, y0 + (h - b.height * s) / 2f)
     }
 
     private var reloadGen = 0
@@ -107,22 +125,171 @@ class ImeRootView(
     /** Giải lại ảnh nền trên [background] (không chặn main); chưa xong thì nền màu theme. */
     fun reloadWallpaper(background: (Runnable) -> Unit) {
         val f = wallpaperFile ?: return
-        if (wallpaper != null || width <= 0 || height <= 0) return
+        val w = if (floating) panel.width() else width
+        val h = if (floating) panel.height() else height
+        if (wallpaper != null || w <= 0 || h <= 0) return
         val gen = ++reloadGen
-        val w = width; val h = height; val hw = isHardwareAccelerated
+        val hw = isHardwareAccelerated
+        wallW = w; wallH = h
         background(Runnable {
             val b = WallpaperBitmap.load(f, theme.settings.version, w, h, hw)
-            post { if (gen == reloadGen && width == w && height == h) setWallpaper(b) }
+            post { if (gen == reloadGen && wallW == w && wallH == h) setWallpaper(b) }
         })
     }
 
     override fun onDraw(canvas: android.graphics.Canvas) {
         super.onDraw(canvas)
+        if (floating) { drawFloatingPanel(canvas); return }
+        drawWallpaper(canvas)
+    }
+
+    private fun drawWallpaper(canvas: android.graphics.Canvas) {
         val b = wallpaper ?: return
         // Bitmap HARDWARE chỉ vẽ được trên canvas GPU (canvas phần mềm — vd chụp view — bỏ qua).
         if (b.config == android.graphics.Bitmap.Config.HARDWARE && !canvas.isHardwareAccelerated) return
         canvas.drawBitmap(b, wallMatrix, wallPaint)
         canvas.drawColor(dimColor)
+    }
+
+    // MARK: thả nổi (#112) — FloatingKeyboard. Tắt ⇒ không nhánh nào dưới đây chạy.
+
+    /** Bàn phím thả nổi: khung bo góc ở (fx, fy), ngoài khung trong suốt. Đặt qua [setFloating]. */
+    var floating = false; private set
+    private var floatFx = FloatingKeyboard.DEFAULT_FX
+    private var floatFy = FloatingKeyboard.DEFAULT_FY
+    /** Khung (toạ độ view gốc) — hợp lệ sau onLayout khi [floating]. */
+    val panel = android.graphics.Rect()
+    private val panelPath = android.graphics.Path()
+    private var statusTop = 0
+    /** Kéo xong (fx, fy) ⇒ IME lưu theo chiều màn hình. */
+    var onFloatMoved: ((Float, Float) -> Unit)? = null
+    /** Nút ⤓ trên thanh kéo ⇒ IME gắn bàn phím lại. */
+    var onFloatExit: (() -> Unit)? = null
+    private val handlePx get() = Math.round(theme.dp(FloatingKeyboard.HANDLE_DP))
+    private var floatPaint: android.graphics.Paint? = null
+    private var dragMode = -1                  // -1 không, 0 kéo, 1 nút gắn lại
+    private var downRawX = 0f; private var downRawY = 0f
+    private var downLeft = 0; private var downTop = 0
+
+    fun setFloating(on: Boolean, fx: Float = FloatingKeyboard.DEFAULT_FX, fy: Float = FloatingKeyboard.DEFAULT_FY) {
+        val f = FloatingKeyboard.clampFraction(fx); val g = FloatingKeyboard.clampFraction(fy)
+        if (on == floating && f == floatFx && g == floatFy) return
+        floatFx = f; floatFy = g
+        if (on != floating) {
+            floating = on
+            dragMode = -1
+            background = if (on) null else bgDrawable
+            setWillNotDraw(!on && wallpaperFile == null)
+            clipChildren = !on              // balloon / popup vẽ được phía trên khung
+            if (on && floatPaint == null) floatPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            panel.setEmpty()
+            wallW = 0; wallH = 0           // vùng nền đổi ⇒ giải lại theo cỡ mới
+        }
+        requestLayout(); invalidate()
+    }
+
+    private fun drawFloatingPanel(canvas: android.graphics.Canvas) {
+        if (panel.isEmpty) return
+        val save = canvas.save()
+        canvas.clipPath(panelPath)
+        bgDrawable.setBounds(panel)
+        bgDrawable.draw(canvas)
+        drawWallpaper(canvas)
+        canvas.restoreToCount(save)
+        val p = floatPaint ?: return
+        // Viền mảnh tách khung khỏi app bên dưới.
+        p.style = android.graphics.Paint.Style.STROKE
+        p.strokeWidth = theme.dp(1f)
+        p.color = theme.withAlpha(theme.ink, 0.14f)
+        canvas.drawPath(panelPath, p)
+        // Thanh kéo: vạch giữa + nút ⤓ (gắn lại) đầu phải.
+        val hTop = panel.bottom - handlePx
+        val cy = hTop + handlePx / 2f
+        val cx = panel.exactCenterX()
+        p.style = android.graphics.Paint.Style.FILL
+        p.color = theme.withAlpha(theme.ink, 0.38f)
+        val half = theme.dp(18f); val th = theme.dp(2f)
+        canvas.drawRoundRect(cx - half, cy - th, cx + half, cy + th, th, th, p)
+        p.color = theme.withAlpha(theme.ink, 0.75f)
+        ImeIcons.draw(canvas, ImeIcons.DOCK, panel.right - theme.dp(FloatingKeyboard.EXIT_W_DP) / 2f, cy, theme.dp(18f), p)
+    }
+
+    override fun drawChild(canvas: android.graphics.Canvas, child: android.view.View, drawingTime: Long): Boolean {
+        if (!floating || child === balloon) return super.drawChild(canvas, child, drawingTime)
+        val save = canvas.save()
+        canvas.clipPath(panelPath)           // phím / strip theo góc bo của khung
+        val r = super.drawChild(canvas, child, drawingTime)
+        canvas.restoreToCount(save)
+        return r
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+        if (!floating) return super.onTouchEvent(event)
+        when (event.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                val exitW = Math.round(theme.dp(FloatingKeyboard.EXIT_W_DP))
+                dragMode = FloatingKeyboard.handleHit(panel.left, panel.right, panel.bottom - handlePx, panel.bottom,
+                    exitW, event.x, event.y)
+                if (dragMode < 0) return false
+                downRawX = event.rawX; downRawY = event.rawY
+                downLeft = panel.left; downTop = panel.top
+                return true
+            }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                if (dragMode < 0) return false
+                val dx = event.rawX - downRawX; val dy = event.rawY - downRawY
+                // Chạm nút ⤓ rồi kéo đi xa ⇒ thành kéo khung.
+                if (dragMode == 1 && maxOf(Math.abs(dx), Math.abs(dy)) > theme.dp(12f)) dragMode = 0
+                if (dragMode == 0) moveTo(downLeft + Math.round(dx), downTop + Math.round(dy))
+                return true
+            }
+            android.view.MotionEvent.ACTION_UP -> {
+                val m = dragMode; dragMode = -1
+                if (m == 1) onFloatExit?.invoke()
+                else if (m == 0) onFloatMoved?.invoke(floatFx, floatFy)
+                return m >= 0
+            }
+            android.view.MotionEvent.ACTION_CANCEL -> {
+                if (dragMode == 0) onFloatMoved?.invoke(floatFx, floatFy)
+                dragMode = -1
+                return true
+            }
+        }
+        return dragMode >= 0
+    }
+
+    private fun moveTo(left: Int, top: Int) {
+        val pw = panel.width(); val ph = panel.height()
+        val fx = FloatingKeyboard.fraction(left, 0, width, pw)
+        val fy = FloatingKeyboard.fraction(top, statusTop, height - navInset, ph)
+        if (fx == floatFx && fy == floatFy) return
+        floatFx = fx; floatFy = fy
+        requestLayout(); invalidate()
+    }
+
+    private fun layoutFloating(w: Int, h: Int) {
+        val s = stripPx()
+        val keyH = keyboard.measuredHeight
+        val pw = keyboard.measuredWidth
+        val ph = FloatingKeyboard.panelHeight(s, keyH, handlePx)
+        val px = FloatingKeyboard.place(floatFx, 0, w, pw)
+        val py = FloatingKeyboard.place(floatFy, statusTop, h - navInset, ph)
+        if (panel.left != px || panel.top != py || panel.right != px + pw || panel.bottom != py + ph) {
+            panel.set(px, py, px + pw, py + ph)
+            panelPath.reset()
+            val r = theme.dp(FloatingKeyboard.RADIUS_DP)
+            panelPath.addRoundRect(px.toFloat(), py.toFloat(), (px + pw).toFloat(), (py + ph).toFloat(), r, r,
+                android.graphics.Path.Direction.CW)
+        }
+        keyboard.layout(px, py + s, px + pw, py + s + keyH)
+        strip.layout(px, py, px + pw, py + strip.measuredHeight)
+        trail.layout(px, py + s, px + pw, py + s + keyH)
+        overlay?.layout(px, py + s, px + pw, py + s + keyH)
+        // Balloon: x theo khung (toạ độ phím), y theo view gốc (KeyboardView cộng `top` của nó)
+        // ⇒ trùm từ đỉnh cửa sổ tới đáy vùng phím: preview / popup hàng trên nổi ra ngoài khung.
+        balloon.layout(px, 0, px + pw, py + s + keyH)
+        if (wallpaperFile != null && (wallW != pw || wallH != ph)) loadWallpaperFor(pw, ph) else updateWallMatrix()
     }
     /** Bảng phủ đúng vùng phím (lịch sử clipboard); null = không có. Thêm lười khi mở lần đầu. */
     var overlay: android.view.View? = null
@@ -134,6 +301,7 @@ class ImeRootView(
         }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (floating) { measureFloating(widthMeasureSpec, heightMeasureSpec); return }
         val w = MeasureSpec.getSize(widthMeasureSpec)
         val keyH = keyboard.keyAreaPx.roundToInt()
         val s = stripPx()
@@ -148,7 +316,26 @@ class ImeRootView(
         setMeasuredDimension(w, h)
     }
 
+    /** Thả nổi: view gốc chiếm hết chiều cao được cấp (cửa sổ IME ≈ cả màn hình), con theo khung. */
+    private fun measureFloating(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        val avail = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED)
+            resources.displayMetrics.heightPixels else MeasureSpec.getSize(heightMeasureSpec)
+        val keyH = keyboard.keyAreaPx.roundToInt()
+        val s = stripPx()
+        val pw = FloatingKeyboard.panelWidth(w, theme.tablet, theme.landscape)
+        val h = maxOf(avail, FloatingKeyboard.panelHeight(s, keyH, handlePx))
+        val ew = MeasureSpec.makeMeasureSpec(pw, MeasureSpec.EXACTLY)
+        keyboard.measure(ew, MeasureSpec.makeMeasureSpec(keyH, MeasureSpec.EXACTLY))
+        strip.measure(ew, MeasureSpec.makeMeasureSpec(strip.viewHeightPx(), MeasureSpec.EXACTLY))
+        trail.measure(ew, MeasureSpec.makeMeasureSpec(keyH, MeasureSpec.EXACTLY))
+        overlay?.measure(ew, MeasureSpec.makeMeasureSpec(keyH, MeasureSpec.EXACTLY))
+        balloon.measure(ew, MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
+        setMeasuredDimension(w, h)
+    }
+
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        if (floating) { layoutFloating(r - l, b - t); return }
         val w = r - l
         val s = stripPx()
         val keyH = keyboard.measuredHeight
@@ -184,13 +371,18 @@ class ImeRootView(
     private fun applyInsets(insets: WindowInsets) {
         val nav: Int
         val tap: Int
+        val top: Int
         if (Build.VERSION.SDK_INT >= 30) {
             nav = insets.getInsets(WindowInsets.Type.navigationBars()).bottom
             tap = insets.getInsets(WindowInsets.Type.tappableElement()).bottom
+            top = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
         } else {
             nav = insets.systemWindowInsetBottom
             tap = if (Build.VERSION.SDK_INT >= 29) insets.tappableElementInsets.bottom else 0
+            top = insets.systemWindowInsetTop
         }
+        // Thả nổi: khung không chui dưới thanh trạng thái (cửa sổ tràn lên đỉnh màn hình).
+        if (top != statusTop) { statusTop = maxOf(top, 0); if (floating) requestLayout() }
         insetsKnown = true
         update(nav, tap)
     }

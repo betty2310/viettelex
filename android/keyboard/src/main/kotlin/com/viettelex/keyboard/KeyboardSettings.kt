@@ -88,6 +88,8 @@ data class KeyboardSettings(
     var longPressSymbols: Boolean = false,
     /** Chế độ một tay: "off" | "left" | "right" — mặc định tắt (tablet bỏ qua). */
     var oneHandMode: String = "off",
+    /** Bàn phím thả nổi (#112) — mặc định TẮT; bật ⇒ một tay + nâng bàn phím bị bỏ qua. */
+    var floatingKeyboard: Boolean = false,
     var debugTouchLog: Boolean = false,
     /** Lịch sử clipboard — mặc định TẮT. */
     var clipboardHistory: Boolean = false,
@@ -147,6 +149,7 @@ data class KeyboardSettings(
             s.longPressNumbers = b(Keys.LONG_PRESS_NUMBERS, s.longPressNumbers)
             s.longPressSymbols = b(Keys.LONG_PRESS_SYMBOLS, s.longPressSymbols)
             s.oneHandMode = (get(Keys.ONE_HAND_MODE) as? String)?.takeIf { it == "left" || it == "right" } ?: "off"
+            s.floatingKeyboard = b(Keys.FLOATING_KEYBOARD, s.floatingKeyboard)
             s.clipboardHistory = b(Keys.CLIPBOARD_HISTORY, s.clipboardHistory)
             s.incognito = b(Keys.INCOGNITO, s.incognito)
             s.rowHeightAdjust = ((get(Keys.ROW_HEIGHT_ADJUST) as? Number)?.toInt() ?: 0).coerceIn(-10, 10)
