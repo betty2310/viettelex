@@ -2,8 +2,13 @@ package com.viettelex.keyboard
 
 /**
  * Giữ phím ở bàn SỐ / KÝ HIỆU ra hàng biến thể như stock iOS: giữ `"` ⇒ " ” “ „ » «, giữ `$`
- * ⇒ $ ₫ € … Bản THUẦN song sinh iOS/Keyboard/KeyVariants.swift (cùng dữ liệu) — sửa ở đây thì
- * sửa y hệt bên kia. View dùng chung popup trượt-chọn của [DomainPopup].
+ * ⇒ $ ₫ € … Bản THUẦN song sinh iOS/Keyboard/KeyVariants.swift. View dùng chung popup trượt-chọn
+ * của [DomainPopup].
+ *
+ * Từ issue #113 bàn 123 / ký hiệu Android theo Gboard (khác bàn stock iOS), nên hai bảng chỉ
+ * trùng ở các phím có trên CẢ HAI nền tảng — sửa biến thể của phím chung thì sửa y hệt bên kia.
+ * Lệch có chủ đích (pinned bởi KeyVariantsTests.matchesSwiftTable): [ANDROID_ONLY] (₫ là phím
+ * gốc trên bàn 123 Android, giữ ⇒ $ € £ …) và [IOS_ONLY] ($ không còn là phím trên Android).
  *
  * Thứ tự = từ phím ra ngoài: ô 0 là ký tự GỐC (mặc định được chọn khi popup mở, như stock).
  *
@@ -11,7 +16,7 @@ package com.viettelex.keyboard
  * q…p → 1…0, a → @…) và "," → "."; dấu tiếng Việt gõ bằng Telex/VNI.
  */
 object KeyVariants {
-    /** Bảng biến thể (khoá = ký tự gốc trên phím). ₫ đứng ngay sau $ cho người dùng Việt. */
+    /** Bảng biến thể Android (khoá = ký tự gốc trên phím). */
     val table: Map<String, List<String>> = linkedMapOf(
         // bàn 123
         "1" to listOf("1", "¹", "½", "⅓", "¼", "⅛"),
@@ -23,14 +28,15 @@ object KeyVariants {
         "0" to listOf("0", "°"),
         "-" to listOf("-", "–", "—", "•"),
         "/" to listOf("/", "\\"),
-        "\$" to listOf("\$", "₫", "€", "£", "¥", "₩", "₹", "₽", "¢"),
+        // Android: ₫ là phím gốc (Gboard đặt $ ở đây) — giữ ra các tiền tệ khác.
+        "₫" to listOf("₫", "\$", "€", "£", "¥", "₩", "₹", "¢"),
         "&" to listOf("&", "§"),
         "." to listOf(".", "…"),
         "?" to listOf("?", "¿"),
         "!" to listOf("!", "¡"),
         "'" to listOf("'", "‘", "’", "`"),
         "\"" to listOf("\"", "”", "“", "„", "»", "«"),
-        // bàn #+=
+        // bàn ký hiệu (=\<) — "+" "*" nay nằm trên bàn 123 Android
         "%" to listOf("%", "‰"),
         "=" to listOf("=", "≠", "≈"),
         "+" to listOf("+", "±"),
@@ -41,6 +47,11 @@ object KeyVariants {
         "€" to listOf("€", "\$", "£", "¥", "₫"),
         "•" to listOf("•", "·", "°"),
     )
+
+    /** Khoá chỉ Android có (không có trong bảng Swift). */
+    val ANDROID_ONLY: Set<String> = setOf("₫")
+    /** Khoá chỉ iOS có (bảng Swift) — phím đó không còn trên bàn số / ký hiệu Android. */
+    val IOS_ONLY: Set<String> = setOf("\$")
 
     /** Hàng biến thể của phím [key] ở bàn số/ký hiệu; rỗng = không có. Bàn chữ / ô số luôn rỗng. */
     fun variants(key: String, symbolPlane: Boolean, numericField: Boolean = false): List<String> {

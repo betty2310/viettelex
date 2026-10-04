@@ -148,16 +148,91 @@ class KeyLayoutTest {
         assertTrue(space.width > 0.10f * W)
     }
 
-    @Test fun numberAndSymbolPlanes() {
+    private fun rows(keys: List<LaidKey>, h: Float = H) = (0 until 4).map { r ->
+        keys.filter { it.top >= r * h / 4 && it.top < (r + 1) * h / 4 }.sortedBy { it.left }
+    }
+    private fun typed(keys: List<LaidKey>) =
+        keys.filter { it.kind == KeyKind.CHAR || it.kind == KeyKind.PUNCT }.map { it.insert }
+
+    /** #113: bàn 123 kiểu Gboard — đúng hàng, đúng thứ tự, không ký tự nào lặp (kể cả hàng đáy). */
+    @Test fun numbersPlaneGboardNoDuplicates() {
         val n = build(Plane.NUMBERS)
-        assertEquals("1234567890".map { it.toString() }, n.filter { it.top < H / 4 }.map { it.label })
-        assertTrue(n.any { it.label == "$" } && n.any { it.kind == KeyKind.MORE && it.label == "=\\<" })
+        val (r1, r2, r3, bottom) = rows(n)
+        assertEquals("1 2 3 4 5 6 7 8 9 0".split(" "), r1.map { it.label })
+        assertEquals("@ # ₫ _ & - + ( ) /".split(" "), r2.map { it.label })
+        assertEquals(listOf("=\\<", "*", "\"", "'", ":", ";", "!", "?", ""), r3.map { it.label })
+        assertEquals(KeyKind.MORE, r3.first().kind); assertEquals(KeyKind.BACKSPACE, r3.last().kind)
+        assertEquals(listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.RETURN),
+            bottom.map { it.kind })
+        assertEquals(listOf("ABC", ",", "", "", ".", "return"), bottom.map { it.label })
+        val t = typed(n)
+        assertEquals("trùng: ${t.groupBy { it }.filter { it.value.size > 1 }.keys}", t.size, t.toSet().size)
+        assertTrue(t.containsAll(listOf("#", "*", "+", "@", "₫", ",", ".")))
+        assertTrue("\$ chỉ còn ở giữ ₫", "\$" !in t)
+        // hàng 3 khít hai mép, ⇧-cỡ 1.5 phím như plane chữ
+        near(r3.first().left, 3f); near(r3.last().right, W - 3f)
+        near(r3.first().width, r3.last().width)
+        for (k in r3.subList(1, r3.size - 1)) near(k.width, r3[1].width)
+    }
+
+    @Test fun symbolsPlaneComplete() {
         val s = build(Plane.SYMBOLS)
-        assertTrue(s.any { it.label == "₫" } && s.any { it.kind == KeyKind.MORE && it.label == "?123" })
-        assertEquals("ABC", s.first { it.kind == KeyKind.PLANE }.label)
-        val row3 = n.filter { it.top > H / 2 && it.top < 3 * H / 4 }
-        assertEquals(7, row3.size)
-        near(row3.last().right, W - 3f)
+        val (r1, r2, r3, bottom) = rows(s)
+        assertEquals("~ ` | • √ π ÷ × ¶ ∆".split(" "), r1.map { it.label })
+        assertEquals("/ £ € ¥ ^ ° = { } \\".split(" "), r2.map { it.label })
+        assertEquals(listOf("?123", "%", "©", "®", "™", "✓", "[", "]", "<", ">", ""), r3.map { it.label })
+        assertEquals(KeyKind.MORE, r3.first().kind); assertEquals(KeyKind.BACKSPACE, r3.last().kind)
+        assertEquals(listOf("ABC", ",", "", "", ".", "return"), bottom.map { it.label })
+        val t = typed(s)
+        assertEquals(t.size, t.toSet().size)
+        assertEquals(29 + 2, t.size)
+        near(r3.last().right, W - 3f)
+        assertTrue(r3[1].width > 20f)
+    }
+
+    /** Tablet: giữ phím phụ (🌐, ẩn bàn phím) nhưng vẫn không lặp ký tự. */
+    @Test fun numbersPlaneTabletNoDuplicates() {
+        for (plane in listOf(Plane.NUMBERS, Plane.SYMBOLS)) {
+            val k = build(plane, globe = true, tablet = true)
+            val bottom = rows(k)[3]
+            assertEquals(listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.GLOBE, KeyKind.EMOJI, KeyKind.SPACE,
+                KeyKind.PUNCT, KeyKind.RETURN, KeyKind.DISMISS), bottom.map { it.kind })
+            val t = typed(k)
+            assertEquals(t.size, t.toSet().size)
+            near(bottom.last().right, W - 3f, 0.05f)
+        }
+        // một tay / hàng số bật / ô email: cùng bộ phím
+        val base = typed(build(Plane.NUMBERS)).toSet()
+        assertEquals(base, typed(KeyLayout.build(LayoutConfig(Plane.NUMBERS, W, H, d, oneHand = OneHandSide.LEFT))).toSet())
+        assertEquals(base, typed(build(Plane.NUMBERS, InputKind.EMAIL)).toSet())
+    }
+
+    /** ABC về plane chữ; MORE đổi qua lại; "." (hàng đáy) chèn "." ⇒ auto-space ". " / auto-shift như cũ. */
+    @Test fun planeKeysAndPeriod() {
+        val n = build(Plane.NUMBERS)
+        assertEquals("ABC", n.first { it.kind == KeyKind.PLANE }.insert)
+        assertEquals("=\\<", n.first { it.kind == KeyKind.MORE }.insert)
+        assertEquals("?123", build(Plane.SYMBOLS).first { it.kind == KeyKind.MORE }.insert)
+        assertEquals(1, n.count { it.insert == "." }); assertEquals(KeyKind.PUNCT, n.first { it.insert == "." }.kind)
+        assertTrue(PlanePolicy.reevaluatesShift(Plane.LETTERS))
+        assertTrue(!PlanePolicy.reevaluatesShift(Plane.NUMBERS) && !PlanePolicy.reevaluatesShift(Plane.SYMBOLS))
+    }
+
+    /** Mọi khoá bảng biến thể có trên bàn 123 / ký hiệu; phím mới có biến thể; "," không có menu ở đây. */
+    @Test fun variantsCoverNewKeys() {
+        val onPlanes = (typed(build(Plane.NUMBERS)) + typed(build(Plane.SYMBOLS))).toSet()
+        for (key in com.viettelex.keyboard.KeyVariants.table.keys) assertTrue("$key không có trên plane", key in onPlanes)
+        val v = { s: String -> com.viettelex.keyboard.KeyVariants.variants(s, symbolPlane = true) }
+        assertEquals(listOf("₫", "\$", "€", "£", "¥", "₩", "₹", "¢"), v("₫"))
+        assertEquals(listOf("-", "–", "—", "•"), v("-"))
+        assertEquals(listOf("\"", "”", "“", "„", "»", "«"), v("\""))
+        assertEquals(listOf("'", "‘", "’", "`"), v("'"))
+        assertEquals(listOf("!", "¡"), v("!")); assertEquals(listOf("?", "¿"), v("?"))
+        assertEquals(listOf(".", "…"), v(".")); assertEquals(listOf("0", "°"), v("0"))
+        assertEquals(listOf("%", "‰"), v("%")); assertEquals(listOf("*", "×"), v("*"))
+        assertEquals(listOf("=", "≠", "≈"), v("=")); assertEquals(listOf("+", "±"), v("+"))
+        assertEquals(listOf("/", "\\"), v("/")); assertEquals(listOf("&", "§"), v("&"))
+        assertEquals(emptyList<String>(), v(","))
     }
 
     @Test fun templatesBottomRowOnly() {

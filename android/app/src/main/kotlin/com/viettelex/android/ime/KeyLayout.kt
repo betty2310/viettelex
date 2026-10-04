@@ -159,11 +159,17 @@ object KeyLayout {
     private val ROW1 = "qwertyuiop"
     private val ROW2 = "asdfghjkl"
     private val ROW3 = "zxcvbnm"
-    private val NUM1 = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
-    private val NUM2 = listOf("-", "/", ":", ";", "(", ")", "$", "&", "@", "\"")
-    private val SYM1 = listOf("[", "]", "{", "}", "#", "%", "^", "*", "+", "=")
-    private val SYM2 = listOf("_", "\\", "|", "~", "<", ">", "€", "¥", "₫", "•")
-    private val PUNCT3 = listOf(".", ",", "?", "!", "'")
+    internal val NUM1 = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+    /*
+     * Plane 123 / ký hiệu kiểu Gboard (issue #113): KHÔNG ký tự nào lặp trong một plane — "," "."
+     * chỉ ở hàng đáy, # % * + = lên plane 123 (bớt một lần chuyển). ₫ thay $ (giữ ₫ ⇒ $ € £ …,
+     * KeyVariants). Riêng Android; iOS giữ bàn stock.
+     */
+    internal val NUM2 = listOf("@", "#", "₫", "_", "&", "-", "+", "(", ")", "/")
+    internal val NUM3 = listOf("*", "\"", "'", ":", ";", "!", "?")
+    internal val SYM1 = listOf("~", "`", "|", "•", "√", "π", "÷", "×", "¶", "∆")
+    internal val SYM2 = listOf("/", "£", "€", "¥", "^", "°", "=", "{", "}", "\\")
+    internal val SYM3 = listOf("%", "©", "®", "™", "✓", "[", "]", "<", ">")
 
     fun build(c: LayoutConfig): List<LaidKey> {
         // Một tay: dựng plane ở bề ngang hẹp rồi dời — mọi hình học (router, tâm phím gõ
@@ -193,6 +199,7 @@ object KeyLayout {
                 equalRow(out, if (num) NUM1 else SYM1, KeyKind.CHAR, c, 0, rowH, 0f)
                 equalRow(out, if (num) NUM2 else SYM2, KeyKind.CHAR, c, 1, rowH, 0f)
                 thirdRow(out, c, rowH, letters = false)
+                // Hàng đáy: [ABC][,][😊][space][.][↵] (+ 🌐 / ẩn tablet) — "," "." không lặp ở hàng trên.
                 bottomRow(out, c, 3 * rowH, rowH, planeKey = if (c.kind.padPlane != null) "123" else "ABC",
                     clearInsteadOfEmoji = false)
             }
@@ -242,8 +249,8 @@ object KeyLayout {
 
     /**
      * Hàng 3: plane chữ = ⇧(1.5) z…m ⌫(1.5) trên lưới 10 cột; plane số =
-     * [=\\</?123](1.5) . , ? ! ' ⌫(1.5) — 5 dấu chia đều phần còn lại (iOS
-     * fillProportionally; stock đo được ≈ 1.45 phím chữ).
+     * [=\\<](1.5) * " ' : ; ! ? ⌫(1.5), plane ký hiệu = [?123](1.5) % © ® ™ ✓ [ ] < > ⌫(1.5)
+     * — các dấu chia đều phần còn lại (kiểu Gboard).
      */
     private fun thirdRow(out: MutableList<LaidKey>, c: LayoutConfig, rowH: Float, letters: Boolean, y0: Float = 0f) {
         val d = c.density
@@ -263,8 +270,9 @@ object KeyLayout {
         } else {
             val more = if (c.plane == Plane.NUMBERS) "=\\<" else "?123"
             out += LaidKey(KeyKind.MORE, more, more, more, x, t, x + side, b); x += side + gap
-            val p = (inner - 2 * side - 6 * gap) / 5f
-            for (s in PUNCT3) { out += LaidKey(KeyKind.CHAR, s, s, s, x, t, x + p, b); x += p + gap }
+            val row = if (c.plane == Plane.NUMBERS) NUM3 else SYM3
+            val p = (inner - 2 * side - (row.size + 1) * gap) / row.size
+            for (s in row) { out += LaidKey(KeyKind.CHAR, s, s, s, x, t, x + p, b); x += p + gap }
         }
         out += LaidKey(KeyKind.BACKSPACE, "", "", "", x, t, c.widthPx - m, b)
     }
