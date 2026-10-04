@@ -12,10 +12,10 @@ class KeyMenusTests {
     @AfterTest fun reset() { L10n.lang = L10n.DEFAULT }
 
     @Test fun commaChoicesNeverContainMic() {
-        assertEquals(listOf(",", ".", "?", "!", ":", ";", "'", "\"", "-", "…"), CommaPopup.choices)
+        assertEquals(listOf(".", ",", "?", "!", ":", ";", "'", "\"", "-", "…"), CommaPopup.choices)
         assertEquals(CommaPopup.choices, CommaPopup.choices(",", lettersPlane = true))
         assertTrue(CommaPopup.choices.none { "🎤" in it || it.isBlank() })
-        assertEquals(",", CommaPopup.choices[CommaPopup.PRESELECT])
+        assertEquals(".", CommaPopup.choices[CommaPopup.PRESELECT])   // #113: giữ "," chọn sẵn "."
         // Chỉ phím "," bàn chữ; "/" (URL), "@" (email), "." và plane số: không có popup này.
         for (k in listOf("/", "@", ".")) assertTrue(CommaPopup.choices(k, lettersPlane = true).isEmpty())
         assertTrue(CommaPopup.choices(",", lettersPlane = false).isEmpty())
@@ -35,14 +35,14 @@ class KeyMenusTests {
         assertTrue(kotlin.math.abs(c0 - keyX) < 2 * itemW, "ô \",\" ở $c0, phím ở $keyX")
     }
 
-    @Test fun commaHoldReleaseInPlaceTypesComma() {
+    @Test fun commaHoldReleaseInPlaceTypesPeriod() {
         val commits = KeyCommitQueue(); val key = Any(); val out = ArrayList<String>()
         commits.arm(key) { out += "," }
         val hold = DomainPopup.Hold(CommaPopup.choices)
         assertTrue(hold.fire(commits, key, layout, 0f, 100f, keyX, 80f) { out += it })
         assertEquals(CommaPopup.PRESELECT, hold.selection)
         commits.release(key)
-        assertEquals(listOf(","), out)
+        assertEquals(listOf("."), out)   // giữ rồi nhả tại chỗ ⇒ "." (#113)
     }
 
     @Test fun commaSlideInsertsCharacter() {
@@ -50,10 +50,10 @@ class KeyMenusTests {
         commits.arm(key) { out += "," }
         val hold = DomainPopup.Hold(CommaPopup.choices)
         hold.fire(commits, key, layout, 0f, 100f, keyX, 80f) { out += it }
-        hold.move(keyX - itemW, 80f)                  // một ô sang trái (hàng loe trái) ⇒ "."
-        assertEquals(".", hold.chosen)
+        hold.move(keyX - itemW, 80f)                  // một ô sang trái (hàng loe trái) ⇒ ","
+        assertEquals(",", hold.chosen)
         commits.release(key)
-        assertEquals(listOf("."), out)
+        assertEquals(listOf(","), out)
     }
 
     @Test fun emojiMenuActions() {

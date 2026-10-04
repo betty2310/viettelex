@@ -8,9 +8,10 @@ package com.viettelex.keyboard
 object CommaPopup {
     /**
      * Giữ "," (bàn chữ ô thường; ô URL/email có "/" "@" riêng): dấu câu hay dùng. KHÔNG có 🎤
-     * (giọng nói ở menu giữ 😊 — [EmojiKeyMenu]). "," đứng đầu ⇒ giữ rồi nhấc tại chỗ vẫn ra ",".
+     * (giọng nói ở menu giữ 😊 — [EmojiKeyMenu]). "." đứng đầu (chọn sẵn, #113: đã giữ phím
+     * thì muốn ký tự khác ","; chạm vẫn ra ",") ⇒ giữ rồi nhấc tại chỗ ra "." như iOS.
      */
-    val choices: List<String> = listOf(",", ".", "?", "!", ":", ";", "'", "\"", "-", "…")
+    val choices: List<String> = listOf(".", ",", "?", "!", ":", ";", "'", "\"", "-", "…")
     const val PRESELECT = 0
 
     /** Bề rộng ô (dp): 10 ô ⇒ hẹp hơn ô biến thể (38) để hàng không phủ kín bề ngang điện thoại. */
