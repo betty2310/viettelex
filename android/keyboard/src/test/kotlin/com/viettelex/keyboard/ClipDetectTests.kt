@@ -18,6 +18,8 @@ class ClipDetectTests {
     @Test fun otpMessages() {
         assertEquals(listOf(Kind.OTP to "482913"), d("Ma OTP cua quy khach la 482913. Khong chia se ma nay"))
         assertEquals(listOf(Kind.OTP to "5821"), d("Your verification code is 5821"))
+        assertEquals(listOf(Kind.OTP to "651305"), d("The temporary code you requested to sign-in is 651305. Please don't share this code with anyone."))
+        assertEquals(listOf(Kind.OTP to "123123"), d("123123 là OTP là bạn"))   // mã đứng TRƯỚC từ khoá
         assertEquals(listOf(Kind.OTP to "123456"), d("123456"))
         assertEquals(listOf(Kind.OTP to "908172"), d("Mã xác thực (OTP) của bạn là 908172, hiệu lực trong 5 phút."))
         assertEquals(listOf(Kind.OTP to "7731"), d("Mã: 7731"))

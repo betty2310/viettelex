@@ -28,6 +28,8 @@ final class ClipDetectTests: XCTestCase {
     func testOTPEnglish() {
         XCTAssertEqual(kinds("Your verification code is 5821"), ["otp:5821"])
         XCTAssertEqual(kinds("G-438210 is your Google verification code."), ["otp:438210"])
+        XCTAssertEqual(kinds("The temporary code you requested to sign-in is 651305. Please don't share this code with anyone."), ["otp:651305"])
+        XCTAssertEqual(kinds("123123 là OTP là bạn"), ["otp:123123"])   // mã đứng TRƯỚC từ khoá
     }
     func testBareOTP() {
         XCTAssertEqual(kinds("123456"), ["otp:123456"])
