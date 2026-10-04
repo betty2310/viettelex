@@ -949,6 +949,15 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         refreshBar()
     }
 
+    override fun onOpenSettings() {
+        try {
+            val i = packageManager.getLaunchIntentForPackage(packageName) ?: return
+            startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+        } catch (e: Exception) {
+            Log.w(TAG, "open settings: $e")
+        }
+    }
+
     override fun onOpenTemplates() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("viettelex://maucau"))

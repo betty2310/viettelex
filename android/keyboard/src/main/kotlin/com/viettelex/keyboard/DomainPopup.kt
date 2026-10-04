@@ -101,6 +101,15 @@ object DomainPopup {
             if (fired || !commits.isArmed(key)) return false
             commits.disarm(key)
             commits.arm(key) { chosen?.let(insert) }
+            return open(layout, top, bottom, x, y)
+        }
+
+        /**
+         * Mở hàng KHÔNG qua hàng chốt — menu hành động (giữ 😊, [EmojiKeyMenu]): view đọc
+         * [selection] lúc nhấc rồi tự chạy. false nếu đã mở.
+         */
+        fun open(layout: Layout, top: Float, bottom: Float, x: Float, y: Float): Boolean {
+            if (fired) return false
             this.layout = layout; this.top = top; this.bottom = bottom; startX = x
             selection = index(x, y, x, layout, top, bottom)
             fired = true

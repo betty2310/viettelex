@@ -1,0 +1,95 @@
+package com.viettelex.keyboard
+
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** Popup giữ "," (dấu câu) và menu giữ 😊 (🌐 🎤 ✋ ⚙) — Android, hàng ô DomainPopup. */
+class KeyMenusTests {
+    @AfterTest fun reset() { L10n.lang = L10n.DEFAULT }
+
+    @Test fun commaChoicesNeverContainMic() {
+        assertEquals(listOf(",", ".", "?", "!", ":", ";", "'", "\"", "-", "…"), CommaPopup.choices)
+        assertEquals(CommaPopup.choices, CommaPopup.choices(",", lettersPlane = true))
+        assertTrue(CommaPopup.choices.none { "🎤" in it || it.isBlank() })
+        assertEquals(",", CommaPopup.choices[CommaPopup.PRESELECT])
+        // Chỉ phím "," bàn chữ; "/" (URL), "@" (email), "." và plane số: không có popup này.
+        for (k in listOf("/", "@", ".")) assertTrue(CommaPopup.choices(k, lettersPlane = true).isEmpty())
+        assertTrue(CommaPopup.choices(",", lettersPlane = false).isEmpty())
+        // "." ô thường không có đuôi tên miền ⇒ view rơi sang CommaPopup chỉ với ",".
+        assertTrue(DomainPopup.choices(DomainPopup.Field.NORMAL, ",", lettersPlane = true).isEmpty())
+    }
+
+    /** "," cạnh phải space (điện thoại 390 dp: tâm ≈ 0.73 W) ⇒ hàng loe sang trái, ô "," gần ngón. */
+    private val itemW = CommaPopup.itemWidthDp(tablet = false)
+    private val keyX = 285f
+    private val layout = DomainPopup.layout(keyX, itemW, CommaPopup.choices.size, 390f)
+
+    @Test fun commaRowFlaresLeftFromKey() {
+        assertTrue(layout.mirrored)
+        assertTrue(layout.originX >= 2f && layout.originX + layout.width <= 388f)
+        val c0 = layout.slotMinX(0) + itemW / 2
+        assertTrue(kotlin.math.abs(c0 - keyX) < 2 * itemW, "ô \",\" ở $c0, phím ở $keyX")
+    }
+
+    @Test fun commaHoldReleaseInPlaceTypesComma() {
+        val commits = KeyCommitQueue(); val key = Any(); val out = ArrayList<String>()
+        commits.arm(key) { out += "," }
+        val hold = DomainPopup.Hold(CommaPopup.choices)
+        assertTrue(hold.fire(commits, key, layout, 0f, 100f, keyX, 80f) { out += it })
+        assertEquals(CommaPopup.PRESELECT, hold.selection)
+        commits.release(key)
+        assertEquals(listOf(","), out)
+    }
+
+    @Test fun commaSlideInsertsCharacter() {
+        val commits = KeyCommitQueue(); val key = Any(); val out = ArrayList<String>()
+        commits.arm(key) { out += "," }
+        val hold = DomainPopup.Hold(CommaPopup.choices)
+        hold.fire(commits, key, layout, 0f, 100f, keyX, 80f) { out += it }
+        hold.move(keyX - itemW, 80f)                  // một ô sang trái (hàng loe trái) ⇒ "."
+        assertEquals(".", hold.chosen)
+        commits.release(key)
+        assertEquals(listOf("."), out)
+    }
+
+    @Test fun emojiMenuActions() {
+        assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.VOICE, EmojiKeyAction.ONE_HAND, EmojiKeyAction.SETTINGS),
+            EmojiKeyMenu.actions(voiceAvailable = true, oneHandAvailable = true))
+        assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.ONE_HAND, EmojiKeyAction.SETTINGS),
+            EmojiKeyMenu.actions(voiceAvailable = false, oneHandAvailable = true))
+        // Tablet: không một tay.
+        assertEquals(listOf(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyAction.SETTINGS),
+            EmojiKeyMenu.actions(voiceAvailable = false, oneHandAvailable = false))
+        // Đổi bàn phím luôn đầu và chọn sẵn (nhả tại chỗ = hành vi giữ 😊 cũ).
+        for (v in listOf(true, false)) for (o in listOf(true, false))
+            assertEquals(EmojiKeyAction.SWITCH_KEYBOARD, EmojiKeyMenu.actions(v, o)[EmojiKeyMenu.PRESELECT])
+    }
+
+    @Test fun oneHandLabelFollowsState() {
+        assertEquals("Chế độ một tay", EmojiKeyMenu.label(EmojiKeyAction.ONE_HAND, oneHandOn = false))
+        assertEquals("Tắt chế độ một tay", EmojiKeyMenu.label(EmojiKeyAction.ONE_HAND, oneHandOn = true))
+        L10n.lang = "en"
+        assertEquals("One-handed mode", EmojiKeyMenu.label(EmojiKeyAction.ONE_HAND, oneHandOn = false))
+        assertEquals("Turn off one-handed mode", EmojiKeyMenu.label(EmojiKeyAction.ONE_HAND, oneHandOn = true))
+        for (a in EmojiKeyAction.entries) assertTrue(EmojiKeyMenu.label(a, false).isNotBlank())
+    }
+
+    @Test fun emojiMenuOpensWithoutCommitQueue() {
+        // Menu hành động: không chèn chữ; nhấc tại chỗ = mục đầu, trượt sang = mục kế, trượt xa = huỷ.
+        val acts = EmojiKeyMenu.actions(voiceAvailable = true, oneHandAvailable = true)
+        val l = DomainPopup.layout(200f, 48f, acts.size, 390f)
+        val hold = DomainPopup.Hold(acts.map { EmojiKeyMenu.label(it, false) })
+        assertTrue(hold.open(l, 0f, 100f, 200f, 80f))
+        assertFalse(hold.open(l, 0f, 100f, 200f, 80f))
+        assertEquals(EmojiKeyAction.SWITCH_KEYBOARD, acts[hold.selection!!])
+        val dir = if (l.mirrored) -1 else 1
+        hold.move(200f + dir * 48f, 80f)
+        assertEquals(EmojiKeyAction.VOICE, acts[hold.selection!!])
+        hold.move(200f, 80f + 300f)
+        assertNull(hold.selection)
+    }
+}

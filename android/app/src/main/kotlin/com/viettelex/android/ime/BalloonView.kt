@@ -94,6 +94,10 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
         var size = FloatArray(0)
         var itemW = 0f
         var sel = -1
+        /** Icon [ImeIcons] từng ô (menu giữ 😊); null = ô chữ. */
+        var icons: IntArray? = null
+        var iconSize = 0f
+        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     }
     private var pop: Pop? = null
     private var popVisible = false
@@ -108,10 +112,11 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
      * [itemW] bề rộng ô, [textSp] cỡ chữ (tự thu nhỏ cho vừa ô, vd ".com.vn"), [sel] ô chọn sẵn.
      */
     fun showPopup(l: Float, t: Float, r: Float, b: Float, slotLefts: FloatArray, itemW: Float,
-                  choices: List<String>, textSp: Float, sel: Int) {
+                  choices: List<String>, textSp: Float, sel: Int, icons: IntArray? = null) {
         val p = pop ?: Pop(theme).also { pop = it }
         p.rect.set(l, t, r, b)
         p.choices = choices; p.slotL = slotLefts; p.itemW = itemW; p.sel = sel
+        p.icons = icons; p.iconSize = theme.dp(24f)
         val full = theme.sp(textSp)
         p.text.textSize = full
         val room = itemW - theme.dp(6f)
@@ -144,6 +149,12 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
         for (i in p.choices.indices) {
             val x0 = p.slotL[i]
             if (i == p.sel) c.drawRoundRect(x0 + theme.dp(1f), top, x0 + p.itemW - theme.dp(1f), bot, theme.dp(7f), theme.dp(7f), p.hi)
+            val icon = p.icons?.getOrNull(i) ?: -1
+            if (icon >= 0) {
+                p.iconPaint.color = if (i == p.sel) p.selInk else p.ink
+                ImeIcons.draw(c, icon, x0 + p.itemW / 2, (top + bot) / 2, p.iconSize, p.iconPaint)
+                continue
+            }
             p.text.textSize = p.size[i]
             p.text.color = if (i == p.sel) p.selInk else p.ink
             p.text.getFontMetrics(p.fm)

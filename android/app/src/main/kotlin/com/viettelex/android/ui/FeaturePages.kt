@@ -475,7 +475,7 @@ private fun PhimPage(onBack: () -> Unit) {
             RowDivider()
         }
         BoolToggle(Keys.LONG_PRESS_SYMBOLS, Prefs.D.longPressSymbols, tr("Giữ phím hàng 2, 3 để ra ký tự đặc biệt"),
-            tr("Giữ a … l, z … m để gõ @ # \$ _ & - + ( ) … Giữ , để ra dấu chấm (nếu , chưa dùng cho giọng nói)."))
+            tr("Giữ a … l, z … m để gõ @ # \$ _ & - + ( ) … Giữ , để chọn dấu câu (. ? ! : ; …); giữ 😊 để đổi bàn phím, gõ giọng nói, một tay."))
         RowDivider()
         BoolToggle(Keys.SHOW_PERIOD_KEY, Prefs.D.showPeriodKey, tr("Hiện phím dấu chấm cạnh phím cách"),
             tr("Tắt: phím cách rộng hơn — gõ dấu cách hai lần để ra \". \", hoặc dùng bàn ?123. Ô địa chỉ web, email và máy tính bảng luôn có phím dấu chấm."))

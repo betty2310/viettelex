@@ -47,9 +47,13 @@ object ImeIcons {
     const val EXPAND = 29
     /** Thanh gợi ý: mở bảng sửa văn bản (con trỏ chữ I). */
     const val CURSOR = 30
-    /** Gợi ý giữ lâu "," = gõ giọng nói. */
+    /** Gõ giọng nói (menu giữ 😊). */
     const val MIC = 31
-    private const val COUNT = 32
+    /** Menu giữ 😊: chế độ một tay (bàn phím hẹp dồn phải + mũi tên). */
+    const val ONE_HAND = 32
+    /** Menu giữ 😊: cài đặt VietTelex (bánh răng). */
+    const val SETTINGS = 33
+    private const val COUNT = 34
 
     /** Thứ tự icon category của plane emoji (clock → flag). */
     val CATEGORY = intArrayOf(CLOCK, FACE, HARE, FORK_KNIFE, SOCCER, CAR, BULB, HEART, FLAG)
@@ -226,6 +230,22 @@ object ImeIcons {
             addRoundRect(RectF(9f, 3f, 15f, 14f), 3f, 3f, Path.Direction.CW)
             moveTo(5.5f, 11f); quadTo(5.5f, 17.5f, 12f, 17.5f); quadTo(18.5f, 17.5f, 18.5f, 11f)
             moveTo(12f, 17.5f); lineTo(12f, 21f)
+        }
+        p(ONE_HAND, 1.6f) {
+            addRoundRect(RectF(10f, 5f, 21.5f, 19f), 2f, 2f, Path.Direction.CW)
+            for (i in 0..2) { val x = 13f + i * 2.75f; moveTo(x, 9f); lineTo(x + 0.1f, 9f) }
+            for (i in 0..2) { val x = 13f + i * 2.75f; moveTo(x, 12f); lineTo(x + 0.1f, 12f) }
+            moveTo(13.5f, 15.3f); lineTo(18f, 15.3f)
+            moveTo(7.5f, 12f); lineTo(2.5f, 12f); moveTo(5f, 9.5f); lineTo(2.5f, 12f); lineTo(5f, 14.5f)
+        }
+        p(SETTINGS, 1.6f) {
+            addCircle(12f, 12f, 3f, Path.Direction.CW)
+            addCircle(12f, 12f, 6.5f, Path.Direction.CW)
+            for (i in 0 until 8) {
+                val a = Math.toRadians(45.0 * i)
+                moveTo(12f + 6.5f * cos(a).toFloat(), 12f + 6.5f * sin(a).toFloat())
+                lineTo(12f + 9.3f * cos(a).toFloat(), 12f + 9.3f * sin(a).toFloat())
+            }
         }
         p(GRID, 0f) {
             addRoundRect(RectF(4f, 4f, 10.5f, 10.5f), 1.8f, 1.8f, Path.Direction.CW)

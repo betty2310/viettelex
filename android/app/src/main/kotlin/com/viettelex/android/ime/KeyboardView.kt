@@ -11,7 +11,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import com.viettelex.android.R
+import com.viettelex.keyboard.CommaPopup
 import com.viettelex.keyboard.DomainPopup
+import com.viettelex.keyboard.EmojiKeyAction
+import com.viettelex.keyboard.EmojiKeyMenu
 import com.viettelex.keyboard.KeyAlternates
 import com.viettelex.keyboard.KeyVariants
 import com.viettelex.keyboard.EmojiSearch
@@ -74,8 +77,12 @@ class KeyboardView(
         /** Nhấc tay ([commit]) hoặc huỷ (ACTION_CANCEL / bàn phím ẩn). */
         fun onSwipeDeleteEnd(commit: Boolean)
         fun onGlobe(longPress: Boolean)
-        /** Giữ lâu phím "," (chỉ khi [setVoiceAvailable]) — chuyển sang IME giọng nói. */
+        /** Gõ giọng nói: mục 🎤 menu giữ 😊 (TalkBack: giữ lâu ","), chỉ khi [setVoiceAvailable]. */
         fun onVoiceInput()
+        /** Mục ✋ menu giữ 😊: bật/tắt một tay (IME nhớ bên cũ). */
+        fun onToggleOneHand()
+        /** Mục ⚙ menu giữ 😊: mở app VietTelex. */
+        fun onOpenSettings()
         fun onDismissKeyboard()
         fun onTemplate(item: TemplateItem)
         fun onOpenTemplates()
@@ -135,11 +142,12 @@ class KeyboardView(
     private var templates: List<TemplateItem> = emptyList()
 
     // --- popup nhiều lựa chọn kiểu stock iOS (DomainPopup / KeyVariants) ---
-    // Giữ "." bàn chữ ô URL / email ⇒ đuôi tên miền; giữ phím bàn số / ký hiệu ⇒ biến thể
+    // Giữ "." bàn chữ ô URL / email ⇒ đuôi tên miền; giữ "," bàn chữ ⇒ dấu câu (CommaPopup);
+    // giữ 😊 ⇒ menu icon (EmojiKeyMenu, cuối file); giữ phím bàn số / ký hiệu ⇒ biến thể
     // (" → ” “ „ » «, $ → ₫ € …). Ô gốc chọn sẵn, trượt chọn, nhấc chèn, trượt xa huỷ.
     /** IME tắt khi TalkBack / touch exploration (giữ là cử chỉ của trình đọc). */
     var popoversEnabled = true
-        set(v) { if (field != v) { field = v; if (!v) dropPopover() } }
+        set(v) { if (field != v) { field = v; if (!v) { dropPopover(); dropEmojiMenu() }; invalidate() } }
     private var popHold: DomainPopup.Hold? = null
     private var popPid = -1
     private var popKey: LaidKey? = null
@@ -328,12 +336,15 @@ class KeyboardView(
         voiceAvailable = on
         keys.firstOrNull { it.kind == KeyKind.PUNCT && it.label == "," }?.let { invalidateKey(it) }
     }
-    private fun isVoiceComma(k: LaidKey) = voiceAvailable && plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == ","
+    // Popup bật (không TalkBack): giữ "," = popup dấu câu (CommaPopup); hai hành vi cũ dưới chỉ còn cho TalkBack.
+    /** "," bàn chữ có popup dấu câu (không TalkBack). */
+    private fun isCommaPopup(k: LaidKey) = popoversEnabled && plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == ","
+    private fun isVoiceComma(k: LaidKey) = !popoversEnabled && voiceAvailable && plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == ","
     // --- giữ "," ra "." (KeyAlternates.commaHold: bảng ký tự phụ không rỗng) — chỉ khi "," KHÔNG
     // phải phím giọng nói (có IME giọng nói ⇒ giữ nguyên hành động cũ, không ra ".") ---
     private var periodFired = false
     private fun isPeriodComma(k: LaidKey) =
-        plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == "," && KeyAlternates.commaHold(alts, voiceAvailable)
+        !popoversEnabled && plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == "," && KeyAlternates.commaHold(alts, voiceAvailable)
     /** Hết giờ mà "," còn chờ chốt ⇒ đổi thành "." (chốt lúc nhấc / khi ngón khác chạm, như ","). */
     private val periodRun = Runnable {
         val k = commaKey ?: return@Runnable
@@ -697,9 +708,9 @@ class KeyboardView(
             }
             KeyKind.PUNCT -> {
                 drawLabel(c, k.label, cx, cy, letterPaint, letterOff, contentAlpha)
-                // Gợi ý giữ lâu kiểu Gboard: 🎤 nhỏ, mờ ở góc trên-phải phím ",".
+                // Gợi ý giữ lâu kiểu Gboard ở góc trên-phải phím ",": "." (popup dấu câu); TalkBack: 🎤.
                 if (isVoiceComma(k)) icon(c, ImeIcons.MIC, k.right - hintInset, k.top + hintInset, 10f, theme.ink, (contentAlpha * 0.55f).toInt())
-                else if (isPeriodComma(k)) drawLabel(c, KeyAlternates.COMMA_ALT, k.right - hintInset + theme.dp(2f), k.top + hintInset, hintPaint, hintOff, (contentAlpha * 0.55f).toInt())
+                else if (isPeriodComma(k) || isCommaPopup(k)) drawLabel(c, KeyAlternates.COMMA_ALT, k.right - hintInset + theme.dp(2f), k.top + hintInset, hintPaint, hintOff, (contentAlpha * 0.55f).toInt())
             }
             KeyKind.PLANE, KeyKind.MORE -> drawLabel(c, k.label, cx, cy, controlPaint, controlOff, contentAlpha)
             KeyKind.SHIFT -> {
@@ -1034,8 +1045,10 @@ class KeyboardView(
                 feedback.click(Feedback.MODIFIER, this)
                 press(k)
                 globePtr = pid; globeFired = false
-                removeCallbacks(globeLongRun)
-                postDelayed(globeLongRun, GLOBE_HOLD_MS)
+                removeCallbacks(globeLongRun); removeCallbacks(emojiMenuRun)
+                // 😊 + popup bật: giữ = menu (🌐 🎤 ✋ ⚙); 🌐 thật / TalkBack: danh sách bàn phím như cũ.
+                if (k.kind == KeyKind.EMOJI && popoversEnabled) { menuX = x; menuY = y; postDelayed(emojiMenuRun, KeyAlternates.HOLD_MS) }
+                else postDelayed(globeLongRun, GLOBE_HOLD_MS)
             }
             else -> {   // PLANE, MORE, EMOJI, CLEAR, DISMISS: hành động lúc nhấc
                 feedback.click(Feedback.MODIFIER, this)
@@ -1055,6 +1068,7 @@ class KeyboardView(
             return
         }
         if (pid == popPid) popoverMove(x, y)
+        if (pid == globePtr) { menuX = x; menuY = y; emojiMenuMove(x, y) }
         val k = ptrKey[pid] ?: return
         val movedFar = abs(x - ptrDownX[pid]) > slop || abs(y - ptrDownY[pid]) > slop
         when {
@@ -1144,8 +1158,14 @@ class KeyboardView(
                 if (!globeFired && !cancelled) listener?.onGlobe(false)
             }
             KeyKind.EMOJI -> if (pid == globePtr) {
-                removeCallbacks(globeLongRun); globePtr = -1
-                if (!globeFired && !cancelled) controlAction(k)
+                removeCallbacks(globeLongRun); removeCallbacks(emojiMenuRun); globePtr = -1
+                val menu = menuHold
+                if (menu != null) {
+                    val a = menu.selection?.let { menuActions.getOrNull(it) }
+                    dropEmojiMenu()
+                    k.pressed = false; invalidateKey(k)
+                    if (a != null && !cancelled) runMenuAction(a)
+                } else if (!globeFired && !cancelled) controlAction(k)
             }
             KeyKind.SHIFT -> Unit
             KeyKind.EDIT -> if (pid == editPtr) {
@@ -1209,6 +1229,7 @@ class KeyboardView(
         // Bàn phím ẩn / đổi một tay giữa lúc popup mở: không chèn đuôi đang chọn (flush dưới).
         popKey?.let { if (popHold?.fired == true) commits.disarm(it) }
         dropPopover()
+        dropEmojiMenu()
         for (i in 0 until MAX_PTR) {
             ptrKey[i]?.pressed = false
             ptrKey[i] = null; ptrPane[i] = false
@@ -1216,7 +1237,7 @@ class KeyboardView(
         commits.flush()
         endSwipe(commit = false)
         removeCallbacks(spaceHoldRun); removeCallbacks(bsStartRun); removeCallbacks(bsTickRun)
-        removeCallbacks(globeLongRun); removeCallbacks(returnHoldRun); removeCallbacks(editRepeatRun)
+        removeCallbacks(globeLongRun); removeCallbacks(emojiMenuRun); removeCallbacks(returnHoldRun); removeCallbacks(editRepeatRun)
         cancelCommaHold()
         spacePtr = -1; bsPtr = -1; globePtr = -1; returnPtr = -1; bsRepeating = false
         editPtr = -1; editRepeatKey = null; railPtr = -1; railPressed = -1
@@ -1379,7 +1400,7 @@ class KeyboardView(
                     InputKind.URL -> DomainPopup.Field.URL
                     InputKind.EMAIL -> DomainPopup.Field.EMAIL
                     else -> DomainPopup.Field.NORMAL
-                }, k.label, lettersPlane = true)
+                }, k.label, lettersPlane = true).ifEmpty { CommaPopup.choices(k.label, lettersPlane = true) }
             Plane.NUMBERS, Plane.SYMBOLS -> KeyVariants.variants(k.label, symbolPlane = true,
                 numericField = inputKind.padPlane != null)
             else -> emptyList()
@@ -1393,7 +1414,7 @@ class KeyboardView(
         dropPopover()
         popHold = DomainPopup.Hold(choices)
         popPid = pid; popKey = k; popX = x; popY = y
-        popVariants = plane != Plane.LETTERS
+        popVariants = plane != Plane.LETTERS || k.label == ","     // ô hẹp, chữ lớn như biến thể ký tự
         postDelayed(popRun, KeyAlternates.HOLD_MS)
     }
 
@@ -1403,7 +1424,10 @@ class KeyboardView(
         val k = popKey ?: return
         val n = h.choices.size
         val wDp = width / d
-        val itemW = minOf(if (popVariants) (if (theme.tablet) 56f else 38f) else (if (theme.tablet) 68f else 56f),
+        // "," bàn chữ: 10 ô ⇒ ô hẹp hơn để hàng loe từ phím (cạnh phải space) sang trái gọn.
+        val comma = plane == Plane.LETTERS && k.label == ","
+        val itemW = minOf(if (comma) CommaPopup.itemWidthDp(theme.tablet)
+            else if (popVariants) (if (theme.tablet) 56f else 38f) else (if (theme.tablet) 68f else 56f),
             (wDp - 4f) / n)
         val l = DomainPopup.layout(k.centerX / d, itemW, n, wDp)
         // Toạ độ dp theo overlay (strip + phím): popup được phép lấn lên strip, kẹp ở 0.
@@ -1443,6 +1467,71 @@ class KeyboardView(
         if (popHold?.fired == true) balloon.hidePopup()
         popHold = null; popPid = -1; popKey = null
     }
+
+    // MARK: menu giữ 😊 (EmojiKeyMenu) — cùng hàng ô DomainPopup, ô là icon, chạy lúc nhấc
+
+    private var menuHold: DomainPopup.Hold? = null
+    private var menuActions: List<EmojiKeyAction> = emptyList()
+    private var menuX = 0f
+    private var menuY = 0f
+    private val emojiMenuRun = Runnable { openEmojiMenu() }
+
+    private fun menuIcon(a: EmojiKeyAction): Int = when (a) {
+        EmojiKeyAction.SWITCH_KEYBOARD -> ImeIcons.GLOBE
+        EmojiKeyAction.VOICE -> ImeIcons.MIC
+        // Đang một tay ⇒ mục là "thoát" (icon ↔ đầy bề ngang như rail).
+        EmojiKeyAction.ONE_HAND -> if (oneHand != OneHandSide.OFF) ImeIcons.EXPAND else ImeIcons.ONE_HAND
+        EmojiKeyAction.SETTINGS -> ImeIcons.SETTINGS
+    }
+
+    private fun openEmojiMenu() {
+        val k = ptrKey.getOrNull(globePtr)?.takeIf { it.kind == KeyKind.EMOJI } ?: return
+        val acts = EmojiKeyMenu.actions(voiceAvailable, oneHandAvailable = !theme.tablet)
+        val h = DomainPopup.Hold(acts.map { EmojiKeyMenu.label(it, oneHand != OneHandSide.OFF) })
+        val n = acts.size
+        val wDp = width / d
+        val itemW = minOf(if (theme.tablet) 56f else 48f, (wDp - 4f) / n)
+        val l = DomainPopup.layout(k.centerX / d, itemW, n, wDp)
+        val off = top / d
+        val panelH = if (theme.tablet) 52f else 46f
+        val popTop = maxOf((k.top / d + off) - 8f - panelH, 0f)
+        if (!h.open(l, popTop, k.bottom / d + off, menuX / d, menuY / d + off)) return
+        globeFired = true                 // nhấc không mở plane emoji
+        menuHold = h; menuActions = acts
+        val inset = 4f
+        balloon.showPopup((l.originX - inset) * d, popTop * d, (l.originX + l.width + inset) * d, (popTop + panelH) * d,
+            FloatArray(n) { l.slotMinX(it) * d }, itemW * d, h.choices, 18f, h.selection ?: -1,
+            icons = IntArray(n) { menuIcon(acts[it]) })
+        feedback.longPress(this)
+    }
+
+    private fun emojiMenuMove(x: Float, y: Float) {
+        val h = menuHold ?: return
+        if (!h.move(x / d, y / d + top / d)) return
+        balloon.selectPopup(h.selection ?: -1)
+        if (h.selection != null) feedback.tick(this)
+    }
+
+    private fun dropEmojiMenu() {
+        removeCallbacks(emojiMenuRun)
+        if (menuHold == null) return
+        balloon.hidePopup()
+        menuHold = null; menuActions = emptyList()
+    }
+
+    private fun runMenuAction(a: EmojiKeyAction) {
+        feedback.click(Feedback.MODIFIER, this)
+        when (a) {
+            EmojiKeyAction.SWITCH_KEYBOARD -> listener?.onGlobe(true)
+            EmojiKeyAction.VOICE -> listener?.onVoiceInput()
+            EmojiKeyAction.ONE_HAND -> listener?.onToggleOneHand()
+            EmojiKeyAction.SETTINGS -> listener?.onOpenSettings()
+        }
+    }
+
+    /** Test/debug: menu giữ 😊 đang mở + mục chọn. */
+    internal val emojiMenuState: Pair<Boolean, EmojiKeyAction?> get() =
+        (menuHold != null) to menuHold?.selection?.let { menuActions.getOrNull(it) }
 
     /** Test/debug: popup đang hiện + ô chọn. */
     internal val popoverState: Pair<Boolean, String?> get() = balloon.popupVisible to popHold?.chosen
