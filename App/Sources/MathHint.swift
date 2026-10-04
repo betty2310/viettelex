@@ -10,8 +10,13 @@
 //  • Ô nổi riêng (NSPanel không lấy focus) — đường tap (terminal, Chromium, Office) và
 //    app IMK có firstRect hỏng. Vị trí: firstRect của client IMK (nếu cùng app) → rect
 //    dòng của client IMK → AX bounds con trỏ → AX bounds ký tự trước con trỏ → ước lượng
-//    theo số dòng AX → góc TRÁI-dưới của ô đang gõ (không bao giờ khung CẢ CỬA SỔ). Không
-//    bao giờ đặt theo chuột; không tìm được ⇒ không hiện.
+//    theo số dòng AX → góc TRÁI-dưới của ô đang gõ (không bao giờ khung CẢ CỬA SỔ). Mọi
+//    rect "con trỏ" phải nằm trong cửa sổ đang trước (CGWindowList), không dính góc
+//    trên-trái cửa sổ, không suy biến, và (firstRect) phải dời theo con trỏ — Edge trả gốc
+//    cửa sổ khi không biết con trỏ (#104: ô hiện ở góc trên-trái cửa sổ).
+//    Không nguồn nào tin được (Firefox, Edge rác) ⇒ vị trí DỰ ĐOÁN ĐƯỢC thay vì không hiện:
+//    ngay dưới con trỏ chuột nếu chuột nằm trong cửa sổ đang trước (thường là chỗ vừa
+//    click vào ô gõ), không thì giữa-đáy cửa sổ đó; không biết cửa sổ ⇒ không hiện.
 //
 // Ô AX không đọc được (Firefox: Gecko không bật AX cho process ngoài — #104): văn bản
 // trước con trỏ dựng từ chính dòng phím mình thấy gõ kể từ lần dời con trỏ gần nhất
@@ -145,9 +150,10 @@ enum CaretHintLogic {
 
     /// Rect con trỏ đầu tiên dùng được theo `order`. `provider` được gọi LẦN LƯỢT và dừng
     /// ở nguồn đầu tiên hợp lệ (mỗi nguồn là vài lần gọi AX/IMK — không gọi thừa).
-    /// Nguồn "con trỏ" phải nằm trong ô đang gõ (nếu biết `field`) và không to cỡ cả ô
-    /// (Chromium/Electron hay trả khung ô cho range rỗng). nil ⇒ không hiện (không chuột).
-    static func anchor(field: NSRect?, screens: [NSRect],
+    /// Nguồn "con trỏ" phải nằm trong ô đang gõ (nếu biết `field`), trong cửa sổ đang
+    /// trước (nếu biết `window`) và không to cỡ cả ô (Chromium/Electron hay trả khung ô cho
+    /// range rỗng). nil ⇒ dùng `fallback` (chuột / đáy cửa sổ).
+    static func anchor(field: NSRect?, window: NSRect? = nil, screens: [NSRect],
                        provider: (CaretSource) -> NSRect?) -> (rect: NSRect, source: CaretSource)? {
         for src in order {
             guard let r = provider(src) else { continue }
@@ -156,16 +162,92 @@ enum CaretHintLogic {
                 else { continue }
                 return (fieldStartAnchor(r), src)
             }
-            if plausibleCaret(r, field: field, screens: screens) { return (r, src) }
+            if plausibleCaret(r, field: field, window: window, screens: screens) { return (r, src) }
         }
         return nil
     }
 
-    static func plausibleCaret(_ r: NSRect, field: NSRect?, screens: [NSRect]) -> Bool {
-        guard TextToolsPanelLogic.isUsableCaretRect(r, screens: screens), r.width <= 60 else { return false }
+    static func plausibleCaret(_ r: NSRect, field: NSRect?, window: NSRect? = nil, screens: [NSRect]) -> Bool {
+        guard TextToolsPanelLogic.isUsableCaretRect(r, screens: screens), r.width <= 60,
+              r.height >= 4 else { return false }                      // suy biến (cao 0) ⇒ rác
+        if let w = usableWindow(window, screens: screens), !insideWindow(r, w) { return false }
         guard let f = field, f.width > 0, f.height > 0 else { return true }
         let probe = NSPoint(x: r.minX, y: r.midY)
         return f.insetBy(dx: -4, dy: -4).contains(probe)
+    }
+
+    /// Cửa sổ đang trước dùng được để kiểm: đủ lớn, hữu hạn, nằm trên một màn hình.
+    static func usableWindow(_ w: NSRect?, screens: [NSRect]) -> NSRect? {
+        guard let w, w.width >= 50, w.height >= 50, w.origin.x.isFinite, w.origin.y.isFinite,
+              screens.contains(where: { $0.intersects(w) }) else { return nil }
+        return w
+    }
+
+    /// Rect con trỏ nằm TRONG cửa sổ và KHÔNG dính góc trên-trái của nó. Edge/Chromium
+    /// (#104) trả gốc cửa sổ khi không biết con trỏ — rect sát mép trái (±4pt) với đỉnh
+    /// (hoặc đáy) sát đỉnh cửa sổ. Không con trỏ thật nào nằm ở đó (thanh tiêu đề/tab).
+    static func insideWindow(_ r: NSRect, _ w: NSRect) -> Bool {
+        let probe = NSPoint(x: r.minX, y: r.midY)
+        guard w.insetBy(dx: -2, dy: -2).contains(probe) else { return false }
+        let nearLeft = abs(r.minX - w.minX) <= 4
+        let nearTop = abs(r.maxY - w.maxY) <= 4 || abs(r.minY - w.maxY) <= 4
+        return !(nearLeft && nearTop)
+    }
+
+    // MARK: firstRect đứng yên
+
+    /// firstRect IMK trả CÙNG một rect cho các vị trí con trỏ khác nhau ⇒ rác (client không
+    /// biết con trỏ, trả hằng số — #104 Edge). So với mẫu lần hiện trước (cùng app) — không
+    /// thăm dò thêm lúc gõ; app trả rect con trỏ bất kể range vẫn qua được vì con trỏ dời
+    /// thì rect dời. Rect đã chứng minh đứng yên được nhớ (tối đa 4/app) để lần sau gặp lại
+    /// (kể cả cùng vị trí) cũng bị loại. Chỉ dùng trên MAIN.
+    struct StaticRectTracker {
+        private var last: (app: String, offset: Int, rect: NSRect)?
+        private var junk: [String: [NSRect]] = [:]
+
+        static func same(_ a: NSRect, _ b: NSRect) -> Bool {
+            abs(a.minX - b.minX) <= 0.5 && abs(a.minY - b.minY) <= 0.5
+                && abs(a.width - b.width) <= 0.5 && abs(a.height - b.height) <= 0.5
+        }
+
+        /// Ghi mẫu và trả về rect có tin được không.
+        mutating func trust(app: String, offset: Int, rect: NSRect) -> Bool {
+            if junk[app]?.contains(where: { Self.same($0, rect) }) == true { return false }
+            defer { last = (app, offset, rect) }
+            guard let l = last, l.app == app, l.offset != offset, Self.same(l.rect, rect) else { return true }
+            junk[app] = Array(((junk[app] ?? []) + [rect]).suffix(4))
+            return false
+        }
+    }
+
+    // MARK: Không có con trỏ tin được
+
+    enum FallbackBasis: Equatable { case pointer, windowBottom }
+
+    /// Vị trí dự phòng khi không nguồn con trỏ nào tin được (Firefox, Edge trả rác):
+    ///  1. chuột nằm trong cửa sổ đang trước ⇒ ngay DƯỚI chuột (canh trái theo chuột) —
+    ///     thường là chỗ vừa click vào ô gõ; đặt dưới dòng nên không che chữ đang gõ;
+    ///  2. không ⇒ giữa-đáy cửa sổ đang trước (24pt trên mép dưới, phần thấy được);
+    ///  3. không biết cửa sổ ⇒ nil (không hiện — không có gì để neo).
+    /// Chỉ dùng khi `anchor` trả nil, nên không bao giờ thay một rect con trỏ thật.
+    static func fallback(window: NSRect?, mouse: NSPoint,
+                         screens: [(frame: NSRect, visible: NSRect)],
+                         panelSize: NSSize) -> (origin: NSPoint, basis: FallbackBasis)? {
+        guard let w = usableWindow(window, screens: screens.map(\.frame)) else { return nil }
+        let fallbackVisible = screens.first?.visible ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        func visible(at p: NSPoint) -> NSRect {
+            screens.first { $0.frame.insetBy(dx: -1, dy: -1).contains(p) }?.visible ?? fallbackVisible
+        }
+        if w.insetBy(dx: 4, dy: 4).contains(mouse) {
+            // Rect giả cao 20pt quanh điểm nóng của chuột (I-beam cao ~18pt) ⇒ ô hiện dưới nó.
+            let pseudo = NSRect(x: mouse.x, y: mouse.y - 10, width: 0, height: 20)
+            return (TextToolsPanelLogic.origin(caret: pseudo, panelSize: panelSize, visible: visible(at: mouse)),
+                    .pointer)
+        }
+        let vis = visible(at: NSPoint(x: w.midX, y: w.midY))
+        let area = w.intersection(vis).isEmpty ? w : w.intersection(vis)
+        let o = NSPoint(x: area.midX - panelSize.width / 2, y: area.minY + 24)
+        return (TextToolsPanelLogic.clamp(o, panelSize: panelSize, visible: vis), .windowBottom)
     }
 
     /// Nguồn cuối: khung ô ⇒ neo ở mép TRÁI (lề 8pt), đáy ô — ô gợi ý hiện ngay dưới
@@ -215,6 +297,7 @@ final class CaretHint {
     private var shownFrameCG: CGRect?                       // guarded by lock (toạ độ CG, gốc trên-trái)
     private var window: NSPanel?                            // main only
     private var hideWork: DispatchWorkItem?                 // main only
+    private var firstRectTracker = CaretHintLogic.StaticRectTracker()   // main only
     /// Thế hệ phím: +1 mỗi phím (keyAction) — việc chạy nền (sửa lỗi gõ, Thêm dấu) chỉ hiện
     /// kết quả khi chưa có phím nào mới từ lúc kích hoạt ("gõ tiếp là huỷ").
     private var keyGen: UInt64 = 0                          // guarded by lock
@@ -498,9 +581,13 @@ final class CaretHint {
         let ax = AXTextEdit.focusedGeometryReader()
         let field = CaretHintLogic.isFieldRole(ax?.role()) ? ax?.fieldFrame() : nil
         let prevIsNewline = before.last == "\n" || before.last == "\r"
-        let found = CaretHintLogic.anchor(field: field, screens: screens) { src in
+        let frontWindow = FrontWindow.frame()
+        let found = CaretHintLogic.anchor(field: field, window: frontWindow, screens: screens) { src in
             switch src {
-            case .imkFirstRect: return posClient.flatMap(Self.imkCaretRect)
+            case .imkFirstRect:
+                guard let c = posClient, let r = Self.imkCaretRect(c) else { return nil }
+                let app = c.bundleIdentifier() ?? "?"
+                return firstRectTracker.trust(app: app, offset: c.selectedRange().location, rect: r) ? r : nil
             case .imkLineRect: return posClient.flatMap(Self.imkLineRect)
             case .axCaret: return ax?.caretBounds()
             case .axPrevChar:
@@ -513,7 +600,19 @@ final class CaretHint {
             }
         }
         guard let found else {
-            DebugLog.log("caret hint \(s.kind): no caret position → not shown")
+            // Không con trỏ tin được (#104 Firefox/Edge) ⇒ dưới chuột / giữa-đáy cửa sổ.
+            let basis = showPanel(s) { size in
+                CaretHintLogic.fallback(window: frontWindow, mouse: NSEvent.mouseLocation,
+                                        screens: NSScreen.screens.map { ($0.frame, $0.visibleFrame) },
+                                        panelSize: size)
+            }
+            guard let basis else {
+                DebugLog.log("caret hint \(s.kind): no caret position, no front window → not shown")
+                return
+            }
+            lock.withLock { pending = s; pendingSurface = .panel }
+            scheduleAutoHide()
+            DebugLog.log("caret hint \(s.kind): len=\(s.insert.count) via fallback(\(basis)) → panel")
             return
         }
         let surface = CaretHintLogic.surface(imkPath: client != nil && controller != nil,
@@ -527,12 +626,19 @@ final class CaretHint {
             let cg = CGRect(x: f.minX, y: primaryH - f.maxY, width: f.width, height: f.height)
             lock.withLock { shownFrameCG = cg }
         } else {
-            showPanel(s, caret: found.rect)   // ignoresMouseEvents: mọi click đều "ngoài"
+            let caret = found.rect             // ignoresMouseEvents: mọi click đều "ngoài"
+            showPanel(s) { size in
+                (TextToolsPanelLogic.origin(caret: caret, panelSize: size, visible: Self.visibleFrame(for: caret)), ())
+            }
         }
+        scheduleAutoHide()
+        DebugLog.log("caret hint \(s.kind): len=\(s.insert.count) via \(found.source) → \(surface)")
+    }
+
+    private func scheduleAutoHide() {
         let work = DispatchWorkItem { [weak self] in self?.dismiss() }
         hideWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
-        DebugLog.log("caret hint \(s.kind): len=\(s.insert.count) via \(found.source) → \(surface)")
     }
 
     private static func imkCaretRect(_ client: IMKTextInput) -> NSRect? {
@@ -568,7 +674,11 @@ final class CaretHint {
         }
     }
 
-    private func showPanel(_ s: CaretSuggestion, caret: NSRect) {
+    /// Dựng ô nổi; `place` nhận kích thước ô, trả góc dưới-trái + ghi chú, hoặc nil ⇒
+    /// không hiện. Trả ghi chú khi đã hiện.
+    @discardableResult
+    private func showPanel<Note>(_ s: CaretSuggestion,
+                                 place: (NSSize) -> (origin: NSPoint, basis: Note)?) -> Note? {
         let label = NSTextField(labelWithString: s.display)
         label.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
         let hint = NSTextField(labelWithString: "⇥ Tab")
@@ -579,6 +689,7 @@ final class CaretHint {
         stack.spacing = 10
         stack.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
         let size = stack.fittingSize
+        guard let placed = place(size) else { return nil }
 
         let fx = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
         fx.material = .popover
@@ -598,10 +709,10 @@ final class CaretHint {
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         w.ignoresMouseEvents = true
         w.contentView = fx
-        w.setFrameOrigin(TextToolsPanelLogic.origin(caret: caret, panelSize: size,
-                                                    visible: Self.visibleFrame(for: caret)))
+        w.setFrameOrigin(placed.origin)
         w.orderFrontRegardless()
         window = w
+        return placed.basis
     }
 
     private func hideWindows() {

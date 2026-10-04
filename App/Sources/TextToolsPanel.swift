@@ -261,22 +261,7 @@ final class TextToolsPanel {
         return r.origin
     }
 
-    /// Khung cửa sổ trên cùng (lớp thường) của app đang trước, toạ độ Cocoa. Đọc qua
-    /// CGWindowList (chỉ khung — không cần AX, không cần quyền ghi màn hình), nên dùng
-    /// được cả ở app Electron không lộ AX (Zalo).
-    private static func frontWindowFrame() -> NSRect? {
-        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
-              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
-                                                    kCGNullWindowID) as? [[String: Any]] else { return nil }
-        for info in list {                                   // thứ tự trước → sau
-            guard (info[kCGWindowOwnerPID as String] as? Int32) == pid,
-                  (info[kCGWindowLayer as String] as? Int) == 0,
-                  let b = info[kCGWindowBounds as String] as? NSDictionary,
-                  let cg = CGRect(dictionaryRepresentation: b), cg.width >= 50, cg.height >= 50 else { continue }
-            return AXTextEdit.flip(cg)
-        }
-        return nil
-    }
+    private static func frontWindowFrame() -> NSRect? { FrontWindow.frame() }
 
     // MARK: Selection / run
 
@@ -436,5 +421,38 @@ private final class ToolRowView: NSView {
         titleField.textColor = highlighted ? .alternateSelectedControlTextColor : .labelColor
         keyField.textColor = highlighted ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.75)
                                          : .tertiaryLabelColor
+    }
+}
+
+// MARK: - Front window
+
+/// Khung cửa sổ trên cùng (lớp thường) của app đang trước, toạ độ Cocoa. Đọc qua
+/// CGWindowList (chỉ khung — không cần AX, không cần quyền ghi màn hình), nên dùng được
+/// cả ở app Electron không lộ AX (Zalo) và Firefox. Chỉ gọi lúc SẮP hiện một ô (bảng Công
+/// cụ, gợi ý cạnh con trỏ — #104/#105), không bao giờ mỗi phím; nhớ 0,5 s theo pid để hai
+/// lần đọc sát nhau không quét lại. MAIN thread.
+enum FrontWindow {
+    private static var cache: (pid: pid_t, at: TimeInterval, frame: NSRect?)?
+
+    static func frame() -> NSRect? {
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return nil }
+        let now = ProcessInfo.processInfo.systemUptime
+        if let c = cache, c.pid == pid, now - c.at < 0.5 { return c.frame }
+        let f = scan(pid: pid)
+        cache = (pid, now, f)
+        return f
+    }
+
+    private static func scan(pid: pid_t) -> NSRect? {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                                    kCGNullWindowID) as? [[String: Any]] else { return nil }
+        for info in list {                                   // thứ tự trước → sau
+            guard (info[kCGWindowOwnerPID as String] as? Int32) == pid,
+                  (info[kCGWindowLayer as String] as? Int) == 0,
+                  let b = info[kCGWindowBounds as String] as? NSDictionary,
+                  let cg = CGRect(dictionaryRepresentation: b), cg.width >= 50, cg.height >= 50 else { continue }
+            return AXTextEdit.flip(cg)
+        }
+        return nil
     }
 }

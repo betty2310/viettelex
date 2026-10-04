@@ -1,8 +1,9 @@
 // CaretHintTests — gợi ý cạnh con trỏ (MathHint.swift): máy trạng thái phím (hiện → Tab/
 // Enter áp dụng, Esc tắt + nuốt, phím khác tắt + đi tiếp), chip số chỉ-dạng-tiền (fixture
 // chung number-chips.txt), điều kiện kích hoạt ở dấu cách, và thứ tự nguồn vị trí con trỏ
-// (firstRect IMK → AX caret → AX ký tự trước → ước lượng dòng → mép TRÁI ô; không chuột).
-// Không tạo cửa sổ nào.
+// (firstRect IMK → AX caret → AX ký tự trước → ước lượng dòng → mép TRÁI ô), kiểm rect
+// theo cửa sổ đang trước + firstRect đứng yên, và vị trí dự phòng (#104: Edge/Firefox —
+// dưới chuột trong cửa sổ, không thì giữa-đáy cửa sổ). Không tạo cửa sổ nào.
 import AppKit
 import XCTest
 @testable import VietTelex
@@ -277,6 +278,104 @@ final class CaretHintTests: XCTestCase {
         XCTAssertEqual(l2.minY, tall.maxY - 4 - 3 * 18)
         XCTAssertEqual(L.column(before: "abc\n12*3="), 5)
         XCTAssertEqual(L.column(before: "12*3="), 5)
+    }
+
+    // MARK: #104 — kiểm theo cửa sổ, firstRect đứng yên, vị trí dự phòng
+
+    /// Cửa sổ Edge (Cocoa, gốc dưới-trái): x 200…1200, y 100…800 (đỉnh = 800).
+    private let edgeWindow = NSRect(x: 200, y: 100, width: 1000, height: 700)
+
+    /// Edge (#104): firstRect trả gốc cửa sổ (góc trên-trái) — trước đây ô hiện ở đó.
+    func testEdgeJunkAtWindowTopLeftRejected() {
+        let junkBelowTop = NSRect(x: 200, y: 782, width: 0, height: 18)      // đỉnh rect = đỉnh cửa sổ
+        let junkAboveTop = NSRect(x: 200, y: 800, width: 0, height: 18)      // đáy rect = đỉnh cửa sổ
+        let nearJunk = NSRect(x: 203, y: 779, width: 0, height: 18)          // lệch ≤ 4pt vẫn là rác
+        for r in [junkBelowTop, junkAboveTop, nearJunk] {
+            XCTAssertTrue(TextToolsPanelLogic.isUsableCaretRect(r, screens: screens) || r == junkAboveTop)
+            XCTAssertFalse(L.plausibleCaret(r, field: nil, window: edgeWindow, screens: screens), "\(r)")
+        }
+        // Đúng log của reporter: AX không có ô (no-focused-element), chỉ firstRect + rect dòng rác.
+        let r = L.anchor(field: nil, window: edgeWindow, screens: screens) { src in
+            switch src {
+            case .imkFirstRect: return junkBelowTop
+            case .imkLineRect: return NSRect(x: 200, y: 782, width: 1000, height: 18)
+            default: return nil
+            }
+        }
+        XCTAssertNil(r)                                                       // ⇒ dùng fallback
+        // Không biết cửa sổ ⇒ hành vi cũ (không loại thêm).
+        XCTAssertTrue(L.plausibleCaret(junkBelowTop, field: nil, window: nil, screens: screens))
+    }
+
+    func testCaretMustBeInsideFrontWindow() {
+        let real = NSRect(x: 420, y: 300, width: 0, height: 18)              // ô bình luận giữa trang
+        XCTAssertTrue(L.plausibleCaret(real, field: nil, window: edgeWindow, screens: screens))
+        let realTopLine = NSRect(x: 260, y: 760, width: 0, height: 18)       // dòng trên cùng, không sát góc
+        XCTAssertTrue(L.plausibleCaret(realTopLine, field: nil, window: edgeWindow, screens: screens))
+        let outside = NSRect(x: 1300, y: 300, width: 0, height: 18)          // cửa sổ khác / màn khác
+        XCTAssertFalse(L.plausibleCaret(outside, field: nil, window: edgeWindow, screens: screens))
+        let degenerate = NSRect(x: 420, y: 300, width: 0, height: 0)          // cao 0
+        XCTAssertFalse(L.plausibleCaret(degenerate, field: nil, window: edgeWindow, screens: screens))
+        // Cửa sổ vô nghĩa (nhỏ / ngoài màn) ⇒ bỏ qua kiểm cửa sổ.
+        XCTAssertTrue(L.plausibleCaret(outside, field: nil, window: NSRect(x: 0, y: 0, width: 10, height: 10),
+                                       screens: screens))
+        XCTAssertTrue(L.plausibleCaret(outside, field: nil, window: NSRect(x: 5000, y: 0, width: 800, height: 600),
+                                       screens: screens))
+    }
+
+    /// firstRect không dời khi con trỏ dời ⇒ rác; app trả rect con trỏ thật (dời theo) ⇒ tin.
+    func testStaticFirstRectRejected() {
+        var t = L.StaticRectTracker()
+        let junk = NSRect(x: 300, y: 500, width: 0, height: 18)
+        XCTAssertTrue(t.trust(app: "edge", offset: 3, rect: junk))           // lần đầu: chưa biết
+        XCTAssertFalse(t.trust(app: "edge", offset: 12, rect: junk))         // vị trí khác, rect y hệt
+        XCTAssertFalse(t.trust(app: "edge", offset: 12, rect: junk))         // đã nhớ: vẫn loại
+        XCTAssertFalse(t.trust(app: "edge", offset: 3, rect: junk))          // kể cả cùng vị trí cũ
+        let moved = NSRect(x: 360, y: 500, width: 0, height: 18)
+        XCTAssertTrue(t.trust(app: "edge", offset: 20, rect: moved))         // ô khác, con trỏ thật
+
+        var u = L.StaticRectTracker()
+        XCTAssertTrue(u.trust(app: "a", offset: 5, rect: junk))
+        XCTAssertTrue(u.trust(app: "a", offset: 5, rect: junk))              // cùng vị trí: không kết luận
+        XCTAssertTrue(u.trust(app: "b", offset: 9, rect: junk))              // app khác: không so
+        XCTAssertTrue(u.trust(app: "b", offset: 10, rect: junk.offsetBy(dx: 7.5, dy: 0)))   // dời theo chữ
+    }
+
+    private var screenPairs: [(frame: NSRect, visible: NSRect)] {
+        [(frame: screens[0], visible: NSRect(x: 0, y: 0, width: 1440, height: 875))]
+    }
+    private let hintSize = NSSize(width: 150, height: 28)
+
+    /// Firefox (#104): không nguồn nào (AX mù, firstRect nil) ⇒ chuột trong cửa sổ ⇒ ngay
+    /// dưới chuột, canh trái theo chuột.
+    func testFallbackNearPointerInsideWindow() {
+        let none = L.anchor(field: nil, window: edgeWindow, screens: screens) { _ in nil }
+        XCTAssertNil(none)
+        let mouse = NSPoint(x: 500, y: 400)
+        let f = L.fallback(window: edgeWindow, mouse: mouse, screens: screenPairs, panelSize: hintSize)
+        XCTAssertEqual(f?.basis, .pointer)
+        XCTAssertEqual(f?.origin.x, 500)
+        XCTAssertEqual(f!.origin.y + hintSize.height, mouse.y - 10 - 4, accuracy: 0.01)   // dưới dòng của chuột
+    }
+
+    /// Chuột ngoài cửa sổ đang trước (gõ bằng phím, chuột để ở Dock…) ⇒ giữa-đáy cửa sổ.
+    func testFallbackWindowBottomCentre() {
+        let f = L.fallback(window: edgeWindow, mouse: NSPoint(x: 1350, y: 40), screens: screenPairs,
+                           panelSize: hintSize)
+        XCTAssertEqual(f?.basis, .windowBottom)
+        XCTAssertEqual(f!.origin.x + hintSize.width / 2, edgeWindow.midX, accuracy: 0.01)
+        XCTAssertEqual(f?.origin.y, edgeWindow.minY + 24)
+        // Cửa sổ tràn xuống dưới màn hình ⇒ phần thấy được, kẹp trong visibleFrame.
+        let tall = NSRect(x: 200, y: -300, width: 1000, height: 1100)
+        let g = L.fallback(window: tall, mouse: NSPoint(x: 1350, y: 40), screens: screenPairs, panelSize: hintSize)
+        XCTAssertEqual(g?.origin.y, 24)
+    }
+
+    /// Không biết cửa sổ ⇒ không hiện (không đoán bừa trên màn hình).
+    func testFallbackNeedsWindow() {
+        XCTAssertNil(L.fallback(window: nil, mouse: NSPoint(x: 500, y: 400), screens: screenPairs, panelSize: hintSize))
+        XCTAssertNil(L.fallback(window: NSRect(x: 0, y: 0, width: 20, height: 20), mouse: .zero,
+                                screens: screenPairs, panelSize: hintSize))
     }
 
     func testSurfaceChoice() {
