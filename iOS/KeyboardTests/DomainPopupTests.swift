@@ -3,6 +3,51 @@
 import XCTest
 import UIKit
 
+/// Chip ô URL / thanh địa chỉ (URLChips): chèn tại con trỏ; `https://` chỉ khi ô trống.
+final class URLChipsTests: XCTestCase {
+    private func labels(_ before: String, _ after: String = "") -> [String] {
+        URLChips.chips(before: before, after: after).map(\.label)
+    }
+    private func insert(_ label: String, _ before: String, _ after: String = "") -> String? {
+        URLChips.chips(before: before, after: after).first { $0.label == label }?.insert
+    }
+
+    func testEmptyFieldOffersHttps() {
+        XCTAssertEqual(labels(""), ["https://", "www.", ".com"])
+        XCTAssertEqual(insert("https://", ""), "https://")
+    }
+
+    func testHttpsOnlyWhenFieldEmpty() {
+        XCTAssertFalse(labels("", "abc").contains("https://"))      // con trỏ đầu ô có chữ
+        XCTAssertFalse(labels("https://").contains("https://"))
+        XCTAssertFalse(labels("vnexpress").contains("https://"))
+    }
+
+    func testStartOfAddressOffersWww() {
+        XCTAssertEqual(labels("https://"), ["www.", ".com", ".vn"])
+        XCTAssertEqual(labels("", "x"), ["www.", ".com", ".vn"])
+        XCTAssertEqual(insert("www.", "https://"), "www.")
+    }
+
+    func testTypingDomainOffersTLDs() {
+        XCTAssertEqual(labels("vnexpress"), [".com", ".vn"])
+        XCTAssertEqual(insert(".vn", "vnexpress"), ".vn")
+        XCTAssertEqual(labels("https://www.tuoitre"), [".com", ".vn"])
+        // Đã gõ "." ⇒ chỉ chèn phần còn thiếu, không thành "..com".
+        XCTAssertEqual(insert(".com", "google."), "com")
+        XCTAssertEqual(insert(".vn", "thanhnien."), "vn")
+        // Từ cuối sau khoảng trắng (thanh tìm-hoặc-địa-chỉ có thể chứa nhiều từ).
+        XCTAssertEqual(labels("tin tuc dantri"), [".com", ".vn"])
+    }
+
+    func testNoChipsWhenDoneOrInPath() {
+        XCTAssertEqual(labels("google.com"), [])
+        XCTAssertEqual(labels("VNEXPRESS.VN"), [])
+        XCTAssertEqual(labels("github.com/ptrinh"), [])
+        XCTAssertEqual(labels("www."), [])   // "www.com" vô nghĩa — chờ gõ tên miền
+    }
+}
+
 final class DomainPopupTests: XCTestCase {
     // MARK: lựa chọn theo loại ô
 

@@ -97,3 +97,32 @@ enum EmailDomains {
             .map { Chip(label: "@" + $0, insert: String($0.dropFirst(p.count))) })
     }
 }
+
+/// Ô URL / thanh địa chỉ (StripMode.tools + FieldTraits.wantsURLChips): chip gõ nhanh địa chỉ
+/// thay cho dải trống. Chạm chèn TẠI CON TRỎ. Thuần — controller tính lại từ context lúc chạm
+/// (con trỏ có thể đã dời), lệch thì bỏ.
+/// - ô trống (trước + sau con trỏ đều rỗng): `https://` `www.` `.com`
+/// - đầu một địa chỉ (trước con trỏ rỗng / khoảng trắng / "://"): `www.` `.com` `.vn`
+/// - đang gõ tên miền: `.com` `.vn` (bỏ đuôi đã có; sau "." chỉ chèn "com"/"vn")
+/// - đã sang đường dẫn ("/" sau tên miền): không chip
+enum URLChips {
+    typealias Chip = EmailDomains.Chip
+    static let https = "https://", www = "www.", tlds = [".com", ".vn"]
+
+    static func chips(before: String, after: String) -> [Chip] {
+        if before.isEmpty && after.isEmpty {
+            return [Chip(label: https, insert: https), Chip(label: www, insert: www),
+                    Chip(label: tlds[0], insert: tlds[0])]
+        }
+        let token = before.reversed().prefix { !$0.isWhitespace }.reversed()
+        var host = Substring(String(token))
+        if let r = host.range(of: "://") { host = host[r.upperBound...] }
+        if host.isEmpty {
+            return [Chip(label: www, insert: www)] + tlds.map { Chip(label: $0, insert: $0) }
+        }
+        guard !host.contains("/") else { return [] }
+        let h = host.lowercased()
+        if tlds.contains(where: { h.hasSuffix($0) }) || h == "www." { return [] }
+        return tlds.map { t in Chip(label: t, insert: h.hasSuffix(".") ? String(t.dropFirst()) : t) }
+    }
+}

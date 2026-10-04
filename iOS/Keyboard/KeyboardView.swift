@@ -1297,8 +1297,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             insertSubview(wallpaperView, aboveSubview: themeBackdrop)
             insertSubview(wallpaperDim, aboveSubview: wallpaperView)
         }
-        themeBackdrop.backgroundColor = palette.background?.ui
-        themeBackdrop.isHidden = palette.background == nil
+        // Theme nền trong suốt (mặc định Hệ thống): KHÔNG phủ nền đục — vật liệu bàn phím hệ
+        // thống lộ ra nên vùng phím cùng màu dải 🌐/🎤 iOS vẽ bên dưới (ThemeSettings.clearBackground).
+        let clear = themeSettings.clearBackground(systemDark: systemDark, wallpaperActive: wallpaperActive)
+        themeBackdrop.backgroundColor = clear ? nil : palette.background?.ui
+        themeBackdrop.isHidden = clear || palette.background == nil
         wallpaperView.isHidden = !wallpaperActive
         // Độ trong suốt phím: alpha của một UIImageView lá (không sublayer) → không offscreen.
         wallpaperView.alpha = CGFloat(palette.surfaceAlpha)

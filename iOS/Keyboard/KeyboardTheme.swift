@@ -320,6 +320,15 @@ struct ThemeSettings: Equatable {
         wallpaper && fileExists && ThemeGate.allowsWallpaper
     }
 
+    /// Nền bàn phím để TRONG — lộ vật liệu bàn phím hệ thống, cùng màu dải 🌐/🎤 iOS vẽ bên
+    /// dưới (kính iOS 26/27, sáng lẫn tối). Chỉ theme nền trong suốt (Hệ thống, Kính) không
+    /// ảnh nền; theme có nền riêng (Tối OLED / Tương phản cao = đen tuyền, pastel) và ảnh nền
+    /// tự vẽ nền ⇒ chấp nhận lệch màu với dải hệ thống. Độ trong suốt phím không đổi quyết
+    /// định này (theme trong suốt vẫn trong suốt).
+    func clearBackground(systemDark: Bool, wallpaperActive: Bool) -> Bool {
+        !wallpaperActive && palette(systemDark: systemDark, wallpaperActive: false).background == nil
+    }
+
     func palette(systemDark: Bool, wallpaperActive: Bool) -> KeyboardPalette {
         let p = effectiveTheme.palette(systemDark: systemDark)
         return (wallpaperActive ? p.overWallpaper() : p)

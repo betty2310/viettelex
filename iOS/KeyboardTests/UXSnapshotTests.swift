@@ -67,6 +67,24 @@ final class UXSnapshotTests: XCTestCase {
                 kb.setNeedsLayout(); kb.layoutIfNeeded()
                 _ = kb.debugBalloon(letter: "e", text: "3")
             }
+            // Thanh địa chỉ Safari (StripMode.tools): ☰/⌄ + chip URL thay dải trống — ô trống
+            // (có https://), đang gõ tên miền, và lời mời Dán; so với dải trống ô mật khẩu.
+            try shot("urlbar-empty-\(s)", dark: dark) { kb in
+                kb.configureInputKind(.search)
+                kb.showSuggestions(.init(nextWords: URLChips.chips(before: "", after: "").map(\.label)))
+            }
+            try shot("urlbar-typing-\(s)", dark: dark) { kb in
+                kb.configureInputKind(.search)
+                kb.showSuggestions(.init(nextWords: URLChips.chips(before: "vnexpress", after: "").map(\.label)))
+            }
+            try shot("urlbar-paste-\(s)", dark: dark) { kb in
+                kb.configureInputKind(.search)
+                var p = KeyboardView.SuggestionSet(nextWords: ["https://", "www.", ".com"]); p.paste = true
+                kb.showSuggestions(p)
+            }
+            try shot("password-blank-\(s)", dark: dark) { kb in
+                kb.setSuggestionsEnabled(false, reserveStrip: true)
+            }
             // Giữ phím ra số / ký hiệu (issue #98): nhãn nhỏ góc trên-phải.
             try shot("alternates-\(s)", dark: dark) { $0.configureKeyAlternates(numbers: true, symbols: true) }
         }

@@ -1,5 +1,54 @@
 import XCTest
 
+/// Dải gợi ý theo loại ô (StripMode): ô từ chối gợi ý chữ nhưng không nhạy cảm (thanh địa
+/// chỉ Safari) có thanh công cụ thay vì dải trống; mật khẩu/OTP/ẩn danh/bàn số giữ dải trống.
+final class StripModeTests: XCTestCase {
+    private func mode(_ t: FieldTraits, show: Bool = true, incognito: Bool = false) -> StripMode {
+        StripMode.of(showSuggestions: show, traits: t, incognito: incognito)
+    }
+
+    func testSafariAddressBarGetsTools() {
+        // Safari/Chrome: keyboardType .webSearch + autocorrection .no.
+        let omnibox = FieldTraits(keyboardType: .webSearch, autocorrection: .no)
+        XCTAssertEqual(mode(omnibox), .tools)
+        XCTAssertTrue(omnibox.wantsURLChips)
+        let url = FieldTraits(keyboardType: .URL, autocorrection: .no, contentType: .URL)
+        XCTAssertEqual(mode(url), .tools)
+        XCTAssertTrue(url.wantsURLChips)
+        // Ô chữ thường tắt autocorrect (ô tên, chat cấm gợi ý): công cụ, KHÔNG chip URL.
+        let plain = FieldTraits(autocorrection: .no)
+        XCTAssertEqual(mode(plain), .tools)
+        XCTAssertFalse(plain.wantsURLChips)
+        XCTAssertEqual(mode(FieldTraits(autocorrection: .no, contentType: .username)), .tools)
+    }
+
+    func testFullWhenSuggestionsAllowed() {
+        XCTAssertEqual(mode(FieldTraits()), .full)
+        XCTAssertEqual(mode(FieldTraits(keyboardType: .webSearch)), .full)   // ô tìm có autocorrect
+        XCTAssertEqual(mode(FieldTraits(keyboardType: .emailAddress, autocorrection: .no)), .full) // chip mail
+    }
+
+    func testSensitiveFieldsKeepBlankBand() {
+        XCTAssertEqual(mode(FieldTraits(secure: true)), .blank)
+        XCTAssertEqual(mode(FieldTraits(keyboardType: .URL, autocorrection: .no, secure: true)), .blank)
+        XCTAssertEqual(mode(FieldTraits(autocorrection: .no, contentType: .password)), .blank)
+        XCTAssertEqual(mode(FieldTraits(autocorrection: .no, contentType: .newPassword)), .blank)
+        XCTAssertEqual(mode(FieldTraits(keyboardType: .numberPad, autocorrection: .no,
+                                        contentType: .oneTimeCode)), .blank)
+        XCTAssertEqual(mode(FieldTraits(keyboardType: .numberPad, autocorrection: .no)), .blank)
+        XCTAssertEqual(mode(FieldTraits(keyboardType: .webSearch, autocorrection: .no), incognito: true), .blank)
+    }
+
+    func testSettingOffMeansNoStrip() {
+        XCTAssertEqual(mode(FieldTraits(), show: false), .off)
+        XCTAssertEqual(mode(FieldTraits(keyboardType: .webSearch, autocorrection: .no), show: false), .off)
+        XCTAssertFalse(StripMode.off.shown)
+        XCTAssertFalse(StripMode.blank.shown)
+        XCTAssertTrue(StripMode.tools.shown)
+        XCTAssertTrue(StripMode.full.shown)
+    }
+}
+
 /// Regression: không gõ được tiếng Việt ở thanh địa chỉ Safari/Chrome và Spotlight
 /// (ô tìm kiếm tắt autocorrect) — passthrough không còn dựa vào autocorrect.
 final class FieldPolicyTests: XCTestCase {

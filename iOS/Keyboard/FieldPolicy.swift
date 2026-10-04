@@ -107,3 +107,41 @@ struct FieldTraits: Equatable {
         old != new
     }
 }
+
+extension FieldTraits {
+    /// Ô nhạy cảm: mật khẩu / mã OTP — dải gợi ý để TRỐNG (không ☰, không 📋, không mời Dán).
+    var sensitive: Bool {
+        if secure { return true }
+        guard let c = contentType else { return false }
+        return [UITextContentType.password, .newPassword, .oneTimeCode].contains(c)
+    }
+
+    /// Ô URL / thanh "tìm hoặc nhập địa chỉ" (Safari, Chrome — keyboardType .webSearch):
+    /// chip `www.` `.com` `.vn` (+ `https://` khi ô trống) ở dải công cụ (URLChips).
+    var wantsURLChips: Bool { inputKind == .url || inputKind == .search }
+}
+
+/// Dải gợi ý hiện gì ở ô hiện tại — song sinh Android StripMode (#113). Chiều cao dải KHÔNG
+/// phụ thuộc chế độ này (giữ theo công tắc toàn cục, e72ae43) — chỉ nội dung đổi.
+enum StripMode: Equatable {
+    /// Tắt "Thanh gợi ý" trong cài đặt: không có dải (chỉ headroom balloon).
+    case off
+    /// Mật khẩu / OTP / ẩn danh / bàn số: dải trống giữ chiều cao.
+    case blank
+    /// Ô từ chối gợi ý chữ (autocorrection = .no: thanh địa chỉ Safari, ô URL…) nhưng không
+    /// nhạy cảm: ☰ / 📋 / ⌄ + lời mời Dán (mời một lần, chip = Plus) + chip URL — không chữ.
+    case tools
+    /// Gợi ý đầy đủ.
+    case full
+
+    /// Dải có vẽ nội dung (thanh công cụ ± gợi ý).
+    var shown: Bool { self == .tools || self == .full }
+
+    /// THUẦN: công tắc + trait ô + ẩn danh → dải hiện gì.
+    static func of(showSuggestions: Bool, traits t: FieldTraits, incognito: Bool) -> StripMode {
+        guard showSuggestions else { return .off }
+        if t.allowsSuggestions { return .full }
+        if t.sensitive || incognito || t.inputKind == .number { return .blank }
+        return .tools
+    }
+}

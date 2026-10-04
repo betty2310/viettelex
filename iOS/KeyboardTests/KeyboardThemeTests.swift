@@ -3,6 +3,49 @@ import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 
+/// Nền bàn phím trong suốt (lộ vật liệu bàn phím hệ thống, cùng màu dải 🌐/🎤) hay tự vẽ.
+final class KeyboardBackdropTests: XCTestCase {
+    private var savedPaywall = false
+    override func setUp() { super.setUp(); savedPaywall = PlusGate.paywallEnabled; PlusGate.paywallEnabled = false }
+    override func tearDown() { PlusGate.paywallEnabled = savedPaywall; super.tearDown() }
+
+    func testDefaultSystemThemeIsClearInLightAndDark() {
+        for dark in [false, true] {
+            XCTAssertTrue(ThemeSettings().clearBackground(systemDark: dark, wallpaperActive: false))
+            XCTAssertNil(ThemeSettings().palette(systemDark: dark, wallpaperActive: false).background)
+        }
+    }
+
+    func testTransparentThemesStayClearWithKeyTransparency() {
+        var s = ThemeSettings()
+        s.keyboardTransparency = 60
+        XCTAssertTrue(s.clearBackground(systemDark: true, wallpaperActive: false))
+        s.theme = .glass
+        XCTAssertTrue(s.clearBackground(systemDark: true, wallpaperActive: false))
+    }
+
+    func testOwnBackgroundThemesAndWallpaperDrawTheirOwn() {
+        var s = ThemeSettings()
+        // "Tối OLED" / "Tương phản cao" là nguồn nền ĐEN TUYỀN; pastel tự vẽ nền.
+        for t in [KeyboardTheme.oled, .contrast, .peach, .mint, .sky, .lavender] {
+            s.theme = t
+            XCTAssertFalse(s.clearBackground(systemDark: true, wallpaperActive: false), t.rawValue)
+        }
+        s.theme = .system
+        XCTAssertFalse(s.clearBackground(systemDark: true, wallpaperActive: true))
+    }
+
+    func testSystemKeysKeepContrastOnSystemBackdrop() {
+        // Nền trong ⇒ phím nằm trên vật liệu hệ thống: chữ vẫn ≥ 4.5:1, phím tách khỏi nền.
+        for dark in [false, true] {
+            let p = KeyboardTheme.system.palette(systemDark: dark)
+            let sys = KeyboardTransparency.systemBackdrop(dark: dark)
+            XCTAssertGreaterThanOrEqual(RGBA.contrast(p.ink, p.keyFill.over(sys)), 4.5)
+            XCTAssertGreaterThan(RGBA.contrast(p.keyFill.over(sys), sys), 1.1)
+        }
+    }
+}
+
 /// Theme bàn phím: token, cổng Plus, lưu/đọc cài đặt, tương phản WCAG, pipeline ảnh nền.
 final class KeyboardThemeTests: XCTestCase {
 

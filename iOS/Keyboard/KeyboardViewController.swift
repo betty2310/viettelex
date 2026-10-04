@@ -269,6 +269,7 @@ final class KeyboardViewController: UIInputViewController {
             guard let self else { return }
             if item == KeyboardView.toolUndoToken { self.undoTextTool(); return }
             if let c = self.emailChips.first(where: { $0.label == item }) { self.acceptEmailChip(c); return }
+            if self.urlChips.contains(where: { $0.label == item }) { self.acceptURLChip(item); return }
             self.textToolUndo = nil
             if item == KeyboardView.restoreToken { self.restoreWordSwipe() }
             else if item.hasPrefix(KeyboardView.clipTokenPrefix) {
@@ -537,14 +538,21 @@ final class KeyboardViewController: UIInputViewController {
                 keyboard.configureInputKind(t.inputKind)
             }
         }
-        // Thanh gợi ý: gate qua toggle trong app; tự tắt ở field từ chối
-        // gợi ý (mật khẩu, autocorrection = .no) — đúng hành vi stock.
-        let active = showSuggestionsSetting && t.allowsSuggestions
-        if force || active != suggestionsActive {
+        // Thanh gợi ý: gate qua toggle trong app. Ô từ chối gợi ý chữ (autocorrection = .no:
+        // thanh địa chỉ Safari…) mà không nhạy cảm ⇒ thanh CÔNG CỤ (☰/📋/⌄ + Dán + chip URL)
+        // thay vì dải trống; mật khẩu/OTP/ẩn danh/bàn số giữ dải trống (StripMode).
+        let mode = StripMode.of(showSuggestions: showSuggestionsSetting, traits: t,
+                                incognito: clip.incognito)
+        let active = mode.shown
+        let modeChanged = mode != stripMode
+        stripMode = mode
+        if force || active != suggestionsActive || modeChanged {
             suggestionsActive = active
             // Strip giữ theo công tắc toàn cục: đổi sang ô không gợi ý không làm bàn phím
             // thấp/cao lại (host không luôn cấp lại ⇒ phím bị ép — bug 1.2.x).
             keyboard.setSuggestionsEnabled(active, reserveStrip: showSuggestionsSetting)
+            // Đổi ô giữa chừng (selectionDidChange không tự vẽ lại bar): nội dung theo chế độ mới.
+            if !force, active { updateSuggestions() }
         }
         updateSwipeEnabled()
     }
@@ -1029,6 +1037,10 @@ final class KeyboardViewController: UIInputViewController {
     private var lastInsertWasSpace = false
     private var autoShiftOn = false
     private var suggestionsActive = true
+    /// Dải gợi ý ở ô hiện tại (StripMode): .tools = chỉ thanh công cụ + Dán + chip URL.
+    private var stripMode = StripMode.full
+    /// Chip URL đang hiện (ô URL / thanh địa chỉ ở chế độ .tools — URLChips); rỗng ở ô khác.
+    private var urlChips: [URLChips.Chip] = []
     /// Phím vừa gõ là "@" hoặc "." → rule email/TLD mới có thể ăn; chỉ khi đó
     /// mới đáng trả giá XPC đọc documentContextBeforeInput.
     private var lastKeyWasEmailTrigger = false
@@ -1294,7 +1306,12 @@ final class KeyboardViewController: UIInputViewController {
         guard suggestionsActive, keyboard?.isBarCollapsed != true else { return }
         let composed = bridge.composedWord
         var set = KeyboardView.SuggestionSet()
-        numberChip = nil; mathChip = nil; emailChips = []
+        numberChip = nil; mathChip = nil; emailChips = []; urlChips = []
+        // Ô từ chối gợi ý chữ (không nhạy cảm): chỉ thanh công cụ — lời mời Dán + chip URL.
+        if stripMode == .tools {
+            showToolsOnly(composing: !composed.isEmpty)
+            return
+        }
         // Ô email (literal): thanh chỉ hiện chip đuôi mail sau "@" ("@gmail.com" trước) —
         // đọc context mỗi phím CHỈ ở ô email; ô khác không qua nhánh này.
         if fieldTraits?.inputKind == .email {
@@ -1705,6 +1722,49 @@ extension KeyboardViewController {
             return
         }
         textDocumentProxy.insertText(c.insert)
+        bridge.reset()
+        lastWord = nil; lastWord2 = nil
+    }
+
+    /// StripMode.tools: không gợi ý chữ — chỉ lời mời Dán (cùng luật mời một lần / Full
+    /// Access / chip tách số = Plus như dải đầy đủ) và chip URL ở ô địa chỉ. ☰/📋/⌄ do
+    /// KeyboardView vẽ sẵn khi dải bật.
+    fileprivate func showToolsOnly(composing: Bool) {
+        var set = KeyboardView.SuggestionSet()
+        if composing {
+            keyboard.hidePasteCard()
+        } else if pasteOffer() {
+            set.paste = pasteButtonSetting; set.pasteIsImage = pasteIsImage
+            let chips = clip.chips(currentChange: pasteSeenChange, usedChange: pasteUsedChange)
+            set.clipChips = chips.map { ($0.label, KeyboardView.clipTokenPrefix + $0.value) }
+        }
+        if fieldTraits?.wantsURLChips == true {
+            let p = textDocumentProxy
+            urlChips = URLChips.chips(before: p.documentContextBeforeInput ?? "",
+                                      after: p.documentContextAfterInput ?? "")
+            set.nextWords = urlChips.map(\.label)
+        }
+        keyboard.showSuggestions(set)
+    }
+
+    /// Chạm chip URL: tính lại từ context lúc chạm (con trỏ có thể đã dời) — không còn chip
+    /// cùng nhãn thì bỏ (không chèn mù). Chữ đang gõ (omnibox gõ Telex) đã nằm sẵn trong ô ⇒
+    /// chỉ chốt engine rồi chèn tại con trỏ.
+    fileprivate func acceptURLChip(_ label: String) {
+        applyingEdit = true
+        defer {
+            applyingEdit = false
+            KeyboardView.clickModifier()
+            updateSuggestions()
+        }
+        let p = textDocumentProxy
+        let now = URLChips.chips(before: p.documentContextBeforeInput ?? "",
+                                 after: p.documentContextAfterInput ?? "")
+        guard let c = now.first(where: { $0.label == label }) else {
+            TouchLog.write("failsafe: url chip context mismatch → skip")
+            return
+        }
+        p.insertText(c.insert)
         bridge.reset()
         lastWord = nil; lastWord2 = nil
     }
