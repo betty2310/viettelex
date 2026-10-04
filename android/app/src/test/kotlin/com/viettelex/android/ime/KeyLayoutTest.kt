@@ -28,6 +28,14 @@ class KeyLayoutTest {
         near(KeyLayout.stripDp(true, false), 34f)
         near(KeyLayout.stripDp(true, true), 14f)
         near(KeyLayout.stripDp(false, false), 0f)
+        // Dải giữ theo công tắc toàn cục: ô mật khẩu/URL (không gợi ý) cao bằng ô thường (port iOS e72ae43).
+        for (collapsed in listOf(false, true)) {
+            val normal = KeyLayout.stripDp(KeyLayout.stripReserved(true), collapsed)
+            val noSuggestField = KeyLayout.stripDp(KeyLayout.stripReserved(showSuggestionsSetting = true), collapsed)
+            near(noSuggestField, normal)
+            near(normal, if (collapsed) 14f else 34f)
+        }
+        near(KeyLayout.stripDp(KeyLayout.stripReserved(false), false), 0f)
     }
 
     @Test fun emojiSearchIsLettersBelowHeader() {

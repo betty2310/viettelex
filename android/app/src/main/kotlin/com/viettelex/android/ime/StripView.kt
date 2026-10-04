@@ -52,6 +52,8 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
 
     private val d = theme.density
     var suggestionsEnabled = false; private set
+    /** Dải giữ chỗ (công tắc toàn cục — [KeyLayout.stripReserved]); nội dung theo [suggestionsEnabled]. */
+    private var reserved = false
     var collapsed = false; private set
     /** 1 = mở, 0 = thu gọn (animation 200 ms). */
     private var openness = 1f
@@ -131,15 +133,17 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     }
 
     /** Chiều cao strip (dp → px) — root dùng để đặt vùng phím. */
-    fun stripPx(): Float = if (!suggestionsEnabled) 0f
+    fun stripPx(): Float = if (!reserved) 0f
         else theme.dp(KeyLayout.COLLAPSED_STRIP + (KeyLayout.OPEN_STRIP - KeyLayout.COLLAPSED_STRIP) * openness)
 
     /** Chiều cao view = strip + 4 dp phủ lên mép hàng phím (nút nổi 18 dp). */
-    fun viewHeightPx(): Int = if (!suggestionsEnabled) 0 else (stripPx() + theme.dp(4f)).toInt()
+    fun viewHeightPx(): Int = if (!reserved) 0 else (stripPx() + theme.dp(4f)).toInt()
 
-    fun configure(enabled: Boolean, collapsed: Boolean, templatesEnabled: Boolean) {
+    /** [reserved]: giữ chỗ dải dù ô này không có gợi ý (bàn phím không đổi cao giữa các ô). */
+    fun configure(enabled: Boolean, collapsed: Boolean, templatesEnabled: Boolean, reserved: Boolean = enabled) {
         anim?.cancel()
         this.suggestionsEnabled = enabled
+        this.reserved = reserved || enabled
         this.collapsed = collapsed
         this.templatesEnabled = templatesEnabled
         openness = if (collapsed) 0f else 1f

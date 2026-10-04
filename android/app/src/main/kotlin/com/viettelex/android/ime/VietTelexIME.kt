@@ -318,7 +318,8 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         collapsed = prefs.getBoolean(Keys.SUGGESTION_BAR_COLLAPSED, false)
         session.barCollapsed = collapsed
         val barOn = session.suggestionsActive
-        st.configure(barOn, collapsed, settings.templatesEnabled)
+        st.configure(barOn, collapsed, settings.templatesEnabled,
+            reserved = KeyLayout.stripReserved(settings.showSuggestions))
         st.oneHandAvailable = !th.tablet
         kb.setOneHand(if (th.tablet) OneHandSide.OFF else OneHandSide.fromPref(settings.oneHandMode))
         kb.setEditHasSelection(info.initialSelStart >= 0 && info.initialSelStart != info.initialSelEnd)

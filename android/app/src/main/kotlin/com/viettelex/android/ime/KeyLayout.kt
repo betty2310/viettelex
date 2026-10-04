@@ -132,6 +132,13 @@ object KeyLayout {
     fun rowUnit(keyAreaPx: Float, numberRow: Boolean): Float =
         keyAreaPx / (if (numberRow) 4f + NUMBER_ROW_RATIO else 4f)
 
+    /**
+     * Dải strip giữ theo CÔNG TẮC "Thanh gợi ý" toàn cục, không theo từng ô (port iOS
+     * e72ae43): ô từ chối gợi ý (mật khẩu, URL, NO_SUGGESTIONS…) để trống dải thay vì làm
+     * bàn phím thấp đi 38 dp rồi cao lại khi sang ô khác.
+     */
+    fun stripReserved(showSuggestionsSetting: Boolean): Boolean = showSuggestionsSetting
+
     fun stripDp(suggestionsEnabled: Boolean, collapsed: Boolean): Float =
         if (!suggestionsEnabled) 0f else if (collapsed) COLLAPSED_STRIP else OPEN_STRIP
 
