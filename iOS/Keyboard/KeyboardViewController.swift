@@ -145,6 +145,10 @@ final class KeyboardViewController: UIInputViewController {
             if side != .off { UserDefaults.standard.set(side.rawValue, forKey: OneHand.lastSideKey) }
         }
         keyboard.onOpenClipboard = { [weak self] in self?.toggleClipboardPanel() }
+        keyboard.onPasteOfferVisible = { [weak self] on in
+            guard let self else { return }
+            if on { self.pasteOnce.displayed(self.pasteSeenChange) } else { self.pasteOnce.ended() }
+        }
         keyboard.onSpaceFlick = { [weak self] in self?.toggleLanguage() }
         keyboard.translatesAutoresizingMaskIntoConstraints = false
         // Như KeyboardView: nền trong suốt = touch xuyên sang app host (rớt phím).
@@ -207,6 +211,7 @@ final class KeyboardViewController: UIInputViewController {
         keyboard.textToolsEnabled = PlusGate.isUnlocked(.textTools)
         checkExternalDictEdit()
         clip.load(from: UserDefaultsProvider.shared)
+        pasteOnce.reload(offeredID: Self.loadPasteOffered())
         // Ẩn danh (thủ công, trong app): không học từ, không lưu clipboard.
         learnEnabled = settings.learnWords && !clip.incognito
         keyboard.setClipboardButton(visible: clip.historyEnabled && hasFullAccess)
@@ -338,6 +343,7 @@ final class KeyboardViewController: UIInputViewController {
         }
         #endif
         super.viewWillDisappear(animated)
+        pasteOnce.ended()   // ẩn bàn phím: lời mời dán đang hiện coi như đã bỏ qua
         closeClipboardPanel()
         learnSettledSwipe()
         swipe?.releaseFuto()  // FUTO Swipe (thử nghiệm): nhả ~2.5 MB khi ẩn
@@ -503,7 +509,7 @@ final class KeyboardViewController: UIInputViewController {
         let old = fieldTraits
         guard force || FieldTraits.needsReconfigure(old: old, new: t) else { return }
         fieldTraits = t
-        if !force { TouchLog.traits(t.logDescription) }
+        if !force { TouchLog.traits(t.logDescription); pasteOnce.ended() }   // đổi ô
         // Ô email/URL/username/OTP: gõ literal. KHÔNG dựa vào autocorrect == .no —
         // Safari/Chrome/Spotlight tắt autocorrect ở ô tìm kiếm (xem FieldPolicy).
         // Đổi chế độ giữa từ → bỏ từ đang gõ (engine không còn khớp cách chèn).
@@ -1531,6 +1537,25 @@ final class KeyboardViewController: UIInputViewController {
     private var pasteCheckedAt = Date.distantPast
     private var pasteCached = false
     private var pasteIsImage = false
+    /// Mời dán MỘT lần mỗi mục clipboard (PasteOfferOnce). Lưu changeCount + mốc khởi động
+    /// máy (changeCount đếm lại sau reboot) vào defaults RIÊNG của bàn phím — không cần
+    /// Full Access, không bao giờ lưu nội dung.
+    private lazy var pasteOnce = PasteOfferOnce(offeredID: Self.loadPasteOffered()) { id in
+        let d = UserDefaults.standard
+        d.set(id, forKey: Self.pasteOfferedKey)
+        d.set(Self.bootEpoch(), forKey: Self.pasteOfferedBootKey)
+    }
+    private static let pasteOfferedKey = "pasteOfferedChange"
+    private static let pasteOfferedBootKey = "pasteOfferedBoot"
+    private static func bootEpoch() -> Double {
+        Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime
+    }
+    private static func loadPasteOffered() -> Int? {
+        let d = UserDefaults.standard
+        guard d.object(forKey: pasteOfferedKey) != nil,
+              abs(d.double(forKey: pasteOfferedBootKey) - bootEpoch()) < 120 else { return nil }
+        return d.integer(forKey: pasteOfferedKey)
+    }
     private func pasteOffer() -> Bool {
         guard pasteButtonSetting || clip.historyEnabled else { return false }
         guard hasFullAccess else { TouchLog.write("paste: no Full Access"); return false }
@@ -1540,7 +1565,7 @@ final class KeyboardViewController: UIInputViewController {
         if let last = textDocumentProxy.documentContextBeforeInput?.last,
            !last.isWhitespace { return false }
         let now = Date()
-        if now.timeIntervalSince(pasteCheckedAt) < 2 { return pasteCached }
+        if now.timeIntervalSince(pasteCheckedAt) < 2 { return pasteCached && pasteOnce.canOffer(pasteSeenChange) }
         pasteCheckedAt = now
         let pb = UIPasteboard.general
         let cc = pb.changeCount
@@ -1554,6 +1579,7 @@ final class KeyboardViewController: UIInputViewController {
         pasteIsImage = false
         pasteCached = cc != pasteUsedChange && has
             && now.timeIntervalSince(pasteSeenAt) < 180
+            && pasteOnce.canOffer(cc)
         if TouchLog.enabled {
             TouchLog.write(String(format: "paste: cc=%d used=%d hasStrings=%d age=%.0fs → %d",
                                   cc, pasteUsedChange, has ? 1 : 0,
@@ -1572,6 +1598,7 @@ final class KeyboardViewController: UIInputViewController {
         swipeTyped = nil; swipeTypedUndo = nil
         if item == KeyboardView.pasteImageToken {       // chỉ hướng dẫn → ẩn thẻ
             pasteUsedChange = UIPasteboard.general.changeCount
+            pasteOnce.used(pasteUsedChange)
             pasteCached = false
             KeyboardView.clickModifier()
             updateSuggestions()
@@ -1593,6 +1620,7 @@ final class KeyboardViewController: UIInputViewController {
                               concealed: Self.isConcealed(pb))
             }
             pasteUsedChange = pb.changeCount
+            pasteOnce.used(pasteUsedChange)
             pasteCached = false
             bridge.reset(); lastWord = nil; lastWord2 = nil
             KeyboardView.clickModifier()
@@ -1763,7 +1791,7 @@ extension KeyboardViewController {
         defer { applyingEdit = false }
         learnSettledSwipe()
         textDocumentProxy.insertText(text)
-        if chip { pasteUsedChange = pasteSeenChange; pasteCached = false }
+        if chip { pasteUsedChange = pasteSeenChange; pasteOnce.used(pasteSeenChange); pasteCached = false }
         bridge.reset(); lastWord = nil; lastWord2 = nil
         KeyboardView.clickModifier()
         updateAutoShift()

@@ -71,6 +71,11 @@ interface ClipboardSource {
     fun readText(): String?
     /** Clip đánh dấu nhạy cảm (Android 13+ ClipDescription.EXTRA_IS_SENSITIVE). */
     fun isSensitive(): Boolean = false
+    /**
+     * Id bền của mục clipboard hiện tại (khác nhau giữa các lần copy, giữ nguyên qua lần
+     * khởi động lại process) — [PasteOfferOnce]. Mặc định: [changeCount] (test).
+     */
+    fun clipId(): Long = changeCount.toLong()
 }
 
 internal object Cp {

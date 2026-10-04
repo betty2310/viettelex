@@ -191,6 +191,9 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         }
         syncClipHistory(prefs.getBoolean(Keys.CLIPBOARD_HISTORY, false))
         clipboard.onChanged = { onClipChanged() }
+        // Mời dán một lần mỗi mục clipboard: chỉ lưu id (timestamp ClipDescription), không nội dung.
+        session.pasteOnce.reload(stateStore().getLong(Keys.PASTE_OFFERED_ID, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE })
+        session.pasteOnce.persist = { stateStore().edit().putLong(Keys.PASTE_OFFERED_ID, it).apply() }
         model.onReady = { refreshBar() }
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
         accessibility = (getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager)?.also {
@@ -249,6 +252,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         kb.listener = this
         kb.letterPrior = ::smartTouchPrior
         st.listener = this
+        st.onPasteOffer = { session.pasteOfferVisible(it) }
         val r = ImeRootView(this, th, kb, st, balloon, trail)
         keyboard = kb; strip = st; root = r
         viewLang = L10n.lang
@@ -346,6 +350,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         root?.requestLayout()
 
         session.invalidatePasteCache()
+        if (!restarting) session.pasteOnce.ended()   // ô mới: lời mời dán đang hiện coi như bỏ qua
         applyAutoShift()
         refreshBar()                  // ô trống → gợi mở đầu ngay khi hiện
         if (BuildConfig.DEBUG) Log.d(TAG, "perf onStartInputView ${SystemClock.elapsedRealtime() - t0} ms")
@@ -415,6 +420,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         feedback.releaseSound()                // âm phím riêng: nhả SoundPool khi ẩn
         closeClipboardPane()
         inputShown = false
+        session.pasteOnce.ended()              // ẩn bàn phím: lời mời dán đang hiện coi như bỏ qua
         clearSwipeUndo()
         strip?.onHidden()
         root?.balloon?.hide()

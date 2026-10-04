@@ -638,7 +638,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if let h = searchBarHeight, h.constant != barH { h.constant = barH }
         suggestionBar.isHidden = !visible || barCollapsed
         suggestionBar.alpha = 1
-        if !visible || barCollapsed { pasteCard.isHidden = true }   // thu gọn / emoji plane
+        if !visible || barCollapsed { pasteCard.isHidden = true; notePasteOffer(false) }   // thu gọn / emoji plane
         lastSuggestionSig = ""   // chrome đổi → lượt show kế ghi lại (kể cả thẻ Dán)
         refreshCollapseButton(visible: visible)
     }
@@ -999,6 +999,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         case .pill(let u):
             texts[0] = (u.label, u.payload)
         }
+        // Lời mời dán có thực sự lên bar không (PasteOfferOnce: mời một lần mỗi mục).
+        notePasteOffer(pasteCardOn || texts.contains { t in
+            t.map { $0.insert == Self.pasteToken || $0.insert.hasPrefix(Self.clipTokenPrefix) } ?? false
+        })
         // Nội dung không đổi (nextWords thường ổn định giữa các phím) → bỏ qua
         // toàn bộ ghi UI: setTitle trên bar fillProportionally kéo theo một
         // lượt đo text/Auto Layout mỗi keystroke.
@@ -1056,6 +1060,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// Payload chip tách số: prefix + giá trị cần chèn.
     static let clipTokenPrefix = "\u{E000}clip:"
     static let clipZoneWidth: CGFloat = 40
+    /// Lời mời dán (thẻ Dán / chip clipboard) hiện (true) / rời bar (false). Gọi khi ĐỔI,
+    /// và mỗi lượt vẽ khi đang hiện (copy mới giữa chừng vẫn được ghi nhận); lúc gõ chữ
+    /// (không có lời mời) không gọi.
+    var onPasteOfferVisible: ((Bool) -> Void)?
+    private var pasteOfferOn = false
+    private func notePasteOffer(_ on: Bool) {
+        guard on || on != pasteOfferOn else { return }
+        pasteOfferOn = on
+        onPasteOfferVisible?(on)
+    }
     private var clipboardButtonVisible = false
     var onOpenClipboard: (() -> Void)?
     /// Panel phủ vùng phím: touch trong panel KHÔNG đi qua router phím chữ.
@@ -1166,6 +1180,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
 
     /// Đang gõ dở: ẩn thẻ Dán NGAY ở phím (không đợi kết quả gợi ý chạy nền).
     func hidePasteCard() {
+        notePasteOffer(false)
         guard !pasteCard.isHidden else { return }
         pasteCard.isHidden = true
         lastSuggestionSig = ""

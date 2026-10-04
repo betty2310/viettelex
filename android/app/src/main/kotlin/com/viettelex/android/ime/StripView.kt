@@ -48,6 +48,20 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     /** Điện thoại (không tablet): giữ lâu icon con trỏ = một tay. */
     var oneHandAvailable = false
 
+    /**
+     * Lời mời dán (thẻ Dán / chip clipboard) hiện (true) / rời bar (false) — PasteOfferOnce.
+     * Gọi khi ĐỔI, và mỗi lượt show khi đang hiện; lúc gõ chữ (không có lời mời) không gọi.
+     */
+    var onPasteOffer: ((Boolean) -> Unit)? = null
+    private var pasteOfferOn = false
+    private fun notePasteOffer(on: Boolean = paste || (0 until chipCount).any { i ->
+        slotPayload[i]?.let { it == SuggestionSet.PASTE_TOKEN || it.startsWith(SuggestionSet.CLIP_CHIP_PREFIX) } == true
+    }) {
+        if (!on && on == pasteOfferOn) return
+        pasteOfferOn = on
+        onPasteOffer?.invoke(on)
+    }
+
     var listener: Listener? = null
 
     private val d = theme.density
@@ -153,7 +167,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         this.templatesEnabled = templatesEnabled
         openness = if (collapsed) 0f else 1f
         lastSig = ""
-        if (!enabled || collapsed) clearContent()
+        if (!enabled || collapsed) { clearContent(); notePasteOffer(false) }
         invalidate()
     }
 
@@ -161,7 +175,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         if (p == plane) return
         val before = tools()
         plane = p
-        if (p == Plane.EMOJI || p == Plane.EMOJI_SEARCH) paste = false
+        if (p == Plane.EMOJI || p == Plane.EMOJI_SEARCH) { paste = false; notePasteOffer(false) }
         if (tools() != before) { lastSet?.let { layoutSlots(it) }; layoutPaste() }
         invalidate()
     }
@@ -192,6 +206,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
 
     /** Có phím chữ ⇒ ẩn thẻ Dán NGAY (không đợi gợi ý nền). */
     fun hidePasteCard() {
+        notePasteOffer(false)
         if (!paste) return
         paste = false; lastSig = ""
         invalidate()
@@ -201,11 +216,13 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         if (!suggestionsEnabled || collapsed) return
         if (set == null) return
         val sig = set.signature() + (if (set.paste) "\u0005p" else "")
-        if (sig == lastSig && width > 0) return
-        lastSig = sig
-        lastSet = set
-        layoutSlots(set)
-        invalidate()
+        if (sig != lastSig || width <= 0) {
+            lastSig = sig
+            lastSet = set
+            layoutSlots(set)
+            invalidate()
+        }
+        notePasteOffer()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

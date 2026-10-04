@@ -1083,6 +1083,14 @@ class KeyboardSession(
     private var pasteUsedChange = -1
     private var pasteCheckedAt = Long.MIN_VALUE / 2
     private var pasteCached = false
+    /** Id ([ClipboardSource.clipId]) của mục mà [pasteCached] tính cho. */
+    private var pasteId = Long.MIN_VALUE
+
+    /** Mời dán một lần mỗi mục clipboard — IME gắn [PasteOfferOnce.persist] + id đã lưu. */
+    val pasteOnce = PasteOfferOnce()
+
+    /** StripView báo lời mời dán thực sự hiện (true) / rời bar (false). */
+    fun pasteOfferVisible(on: Boolean) { if (on) pasteOnce.displayed(pasteId) else pasteOnce.ended() }
 
     /** Bàn phím vừa hiện hẳn / clipboard đổi: bỏ cache 2 s. */
     fun invalidatePasteCache() { pasteCheckedAt = Long.MIN_VALUE / 2 }
@@ -1095,12 +1103,13 @@ class KeyboardSession(
         val last = proxy.contextBeforeInput()?.let { Cp.lastCodePoint(it) }
         if (last != null && !Character.isWhitespace(last)) return false
         val now = clock()
-        if (now - pasteCheckedAt < 2000) return pasteCached
+        if (now - pasteCheckedAt < 2000) return pasteCached && pasteOnce.canOffer(pasteId)
         pasteCheckedAt = now
         val cc = cb.changeCount
         if (cc != pasteSeenChange) { pasteSeenChange = cc; pasteSeenAt = now }
         val has = cb.hasText()
         pasteCached = cc != pasteUsedChange && has && now - pasteSeenAt < 180_000
+        if (pasteCached) { pasteId = cb.clipId(); pasteCached = pasteOnce.canOffer(pasteId) }
         if (TouchLog.enabled) TouchLog.write("paste: cc=$cc used=$pasteUsedChange hasText=${if (has) 1 else 0} " +
             "age=${(now - pasteSeenAt) / 1000}s → ${if (pasteCached) 1 else 0}")
         return pasteCached
@@ -1157,6 +1166,7 @@ class KeyboardSession(
         if (emailBar) { acceptEmailChip(item, proxy); return }
         if (item == SuggestionSet.PASTE_IMAGE_TOKEN) {
             pasteUsedChange = clipboard?.changeCount ?: -1; pasteCached = false
+            pasteOnce.used(pasteId)
             return
         }
         if (item == SuggestionSet.ADD_TONES_TOKEN) { applyAddTones(proxy); return }
@@ -1171,6 +1181,7 @@ class KeyboardSession(
         if (item.startsWith(SuggestionSet.CLIP_CHIP_PREFIX)) {
             proxy.insertText(item.substring(SuggestionSet.CLIP_CHIP_PREFIX.length))
             pasteUsedChange = clipboard?.changeCount ?: -1
+            pasteOnce.used(pasteId)
             pasteCached = false
             bridge.reset(); lastWord = null; lastWord2 = null
             return
@@ -1180,6 +1191,7 @@ class KeyboardSession(
             val s = cb?.readText()
             if (!s.isNullOrEmpty()) proxy.insertText(s)
             pasteUsedChange = cb?.changeCount ?: -1
+            pasteOnce.used(pasteId)
             pasteCached = false
             bridge.reset(); lastWord = null; lastWord2 = null
             return

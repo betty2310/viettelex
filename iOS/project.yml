@@ -187,6 +187,7 @@ targets:
       - Keyboard/ClipDetect.swift
       - Keyboard/ClipboardHistory.swift
       - Keyboard/ClipboardFeature.swift
+      - Keyboard/PasteOfferOnce.swift
       # Bench đường nóng qua controller thật (KeyboardBenchTests, bộ chậm).
       - Keyboard/KeyboardViewController.swift
       - Keyboard/ObjC/VTCatch.m

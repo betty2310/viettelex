@@ -142,7 +142,23 @@ class AndroidClipboard(context: Context) : ClipboardSource {
 
     override fun readText(): String? = try {
         cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString()
+            .also { readHash = it?.hashCode(); readHashCount = count }
     } catch (_: Exception) { null }
+
+    /** Hash nội dung ĐÃ đọc (chip/lịch sử) cho clip hiện tại — chỉ dự phòng cho [clipId]. */
+    private var readHash: Int? = null
+    private var readHashCount = -1
+
+    /**
+     * Id bền: timestamp hệ thống của ClipDescription (API 26, không đọc nội dung, giữ qua lần
+     * process IME chết). Không có ⇒ hash nội dung nếu đã đọc sẵn, cuối cùng changeCount.
+     */
+    override fun clipId(): Long {
+        val ts = try { cm.primaryClipDescription?.timestamp ?: 0L } catch (_: Exception) { 0L }
+        if (ts > 0) return ts
+        val h = readHash
+        return if (h != null && readHashCount == count) (1L shl 40) + h else -1L - count
+    }
 
     private companion object {
         /** = ClipDescription.EXTRA_IS_SENSITIVE (API 33); hằng chuỗi để chạy cả máy cũ. */

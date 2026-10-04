@@ -43,6 +43,8 @@ object Keys {
     const val AUTO_CORRECT = "autoCorrect"
     /** Từ từng hoàn tác tự sửa (chuỗi nhiều dòng) — trạng thái bàn phím, KHÔNG sao lưu. */
     const val AUTO_CORRECT_REJECTED = "autoCorrectRejected"
+    /** Id (timestamp ClipDescription) mục clipboard đã mời "Dán" — PasteOfferOnce; không nội dung. */
+    const val PASTE_OFFERED_ID = "pasteOfferedId"
     /** Vuốt phím cách đổi Tiếng Việt ↔ Tiếng Anh — mặc định TẮT (tắt ⇒ luôn Tiếng Việt). */
     const val SPACE_SWIPE_LANGUAGE = "spaceSwipeLanguage"
     /** Tự thêm dấu cách sau . , ? ! ; : ([AutoSpace]) — mặc định TẮT. Giống iOS. */
