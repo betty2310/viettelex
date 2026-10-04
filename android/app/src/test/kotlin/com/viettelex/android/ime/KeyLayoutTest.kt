@@ -79,9 +79,10 @@ class KeyLayoutTest {
     }
 
     @Test fun noPeriodKeyByDefault() {
-        // #113: bàn chữ ô thường không có "." cạnh space — space nhận phần 0.10 W + 1 khe.
+        // #113: bàn chữ ô thường không có "." cạnh space — space nhận phần 0.10 W + 1 khe;
+        // "," ở PHẢI space như iOS: [?123][😊][space][,][enter].
         val bottom = build(Plane.LETTERS).filter { it.top > 3 * H / 4 - 1 }
-        assertEquals(listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.RETURN),
+        assertEquals(listOf(KeyKind.PLANE, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.RETURN),
             bottom.map { it.kind })
         assertEquals(listOf(","), bottom.filter { it.kind == KeyKind.PUNCT }.map { it.insert })
         val withPeriod = build(Plane.LETTERS, period = true).first { it.kind == KeyKind.SPACE }
@@ -102,14 +103,14 @@ class KeyLayoutTest {
     @Test fun bottomRowProportions() {
         val keys = build(Plane.LETTERS, ret = "go", period = true)
         val bottom = keys.filter { it.top > 3 * H / 4 - 1 }
-        // Gboard: ?123 , 😊 space . enter
-        assertEquals(listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.RETURN),
+        // Công tắc "." bật: ?123 😊 space , . enter ("," cạnh space như iOS, "." sau nó)
+        assertEquals(listOf(KeyKind.PLANE, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.PUNCT, KeyKind.RETURN),
             bottom.map { it.kind })
         assertEquals("?123", bottom[0].label)
         assertEquals(listOf(",", "."), bottom.filter { it.kind == KeyKind.PUNCT }.map { it.insert })
         near(bottom[0].width, 0.15f * W)
         near(bottom[1].width, 0.10f * W)
-        near(bottom[2].width, 0.10f * W)
+        near(bottom[3].width, 0.10f * W)
         near(bottom[4].width, 0.10f * W)
         near(bottom[5].width, 0.15f * W)
         near(bottom.last().right, W - 3f, 0.05f)
@@ -138,8 +139,11 @@ class KeyLayoutTest {
     @Test fun globeAndTabletDismiss() {
         val k = build(Plane.LETTERS, globe = true, tablet = true)
         val kinds = k.filter { it.top > 3 * H / 4 - 1 }.map { it.kind }
-        assertEquals(listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.GLOBE, KeyKind.EMOJI, KeyKind.SPACE,
-            KeyKind.PUNCT, KeyKind.RETURN, KeyKind.DISMISS), kinds)
+        assertEquals(listOf(KeyKind.PLANE, KeyKind.GLOBE, KeyKind.EMOJI, KeyKind.SPACE,
+            KeyKind.PUNCT, KeyKind.PUNCT, KeyKind.RETURN, KeyKind.DISMISS), kinds)
+        // Ô URL / email: "/" "@" vẫn bên trái như cũ.
+        val url = build(Plane.LETTERS, InputKind.URL).filter { it.top > 3 * H / 4 - 1 }.map { it.kind }
+        assertEquals(listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.RETURN), url)
         val space = k.first { it.kind == KeyKind.SPACE }
         assertTrue(space.width > 0.10f * W)
     }

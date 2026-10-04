@@ -271,7 +271,8 @@ object KeyLayout {
 
     /**
      * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10?]
-     * [enter 0.15] ("." theo [hasPeriodKey])[ẩn 0.07 tablet]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
+     * [enter 0.15] ("." theo [hasPeriodKey]). Bàn chữ ô thường: "," sang phải space như iOS —
+     * [?123][🌐?][😊][space][,][.?][enter][ẩn 0.07 tablet]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
      * phím ".com" riêng — space rộng như stock, đuôi tên miền ở giữ "." — DomainPopup).
      * Hệ số nhân với bề ngang CẢ hàng.
      */
@@ -287,16 +288,19 @@ object KeyLayout {
         val slots = ArrayList<Slot>(9)
         val letters = c.plane == Plane.LETTERS
         slots += Slot(KeyKind.PLANE, planeKey, planeKey, 0.15f)
+        // Bàn chữ ô thường: "," sang PHẢI phím cách như iOS ([space][,][.?][enter]).
+        val commaRight = letters && c.kind != InputKind.EMAIL && c.kind != InputKind.URL
         val left = if (letters) when (c.kind) {
             InputKind.EMAIL -> "@"
             InputKind.URL -> "/"
             else -> ","
         } else ","
-        slots += Slot(KeyKind.PUNCT, left, left, 0.10f)
+        if (!commaRight) slots += Slot(KeyKind.PUNCT, left, left, 0.10f)
         if (c.needsGlobe) slots += Slot(KeyKind.GLOBE, "", "", 0.10f)
         slots += if (clearInsteadOfEmoji) Slot(KeyKind.CLEAR, "", "", 0.10f)
                  else Slot(KeyKind.EMOJI, "", "", 0.10f)
         slots += Slot(KeyKind.SPACE, "", " ", -1f)
+        if (commaRight) slots += Slot(KeyKind.PUNCT, ",", ",", 0.10f)
         if (hasPeriodKey(c)) slots += Slot(KeyKind.PUNCT, ".", ".", 0.10f)
         slots += Slot(KeyKind.RETURN, c.returnLabel, "\n", 0.15f)
         if (c.tablet) slots += Slot(KeyKind.DISMISS, "", "", 0.07f)
