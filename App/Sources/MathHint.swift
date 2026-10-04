@@ -137,11 +137,15 @@ enum CaretHintLogic {
 
     // MARK: Vị trí
 
+    // Thứ tự = thứ tự ưu tiên. Rect dòng IMK đứng SAU các nguồn AX: TextMate (04/10/2026)
+    // trả firstRect rác (y≈328353) và rect dòng lệch cả x (152→253→340 khi con trỏ đứng ở
+    // x=86) lẫn y (thấp hơn ~2 dòng) ⇒ ô gợi ý "nhảy lung tung", đè chữ. AX caret đúng.
+    // App AX mù (Firefox, Edge no-focused-element) không có AX ⇒ vẫn rơi xuống rect dòng.
     enum CaretSource: Equatable, CaseIterable {
         case imkFirstRect     // client IMK: firstRect(forCharacterRange: selectedRange)
-        case imkLineRect      // client IMK: attributes(forCharacterIndex:lineHeightRectangle:)
         case axCaret          // AXBoundsForRange (caret, 0)
         case axPrevChar       // AXBoundsForRange (caret-1, 1) → mép phải ký tự trước
+        case imkLineRect      // client IMK: attributes(forCharacterIndex:lineHeightRectangle:)
         case axLineEstimate   // AXInsertionPointLineNumber + cột → ước lượng
         case fieldStart       // khung ô đang gõ → góc TRÁI-dưới (gần đầu chữ)
     }
@@ -582,6 +586,14 @@ final class CaretHint {
         let field = CaretHintLogic.isFieldRole(ax?.role()) ? ax?.fieldFrame() : nil
         let prevIsNewline = before.last == "\n" || before.last == "\r"
         let frontWindow = FrontWindow.frame()
+        if AppState.shared.debugLogging {
+            // Chẩn đoán vị trí (#104/TextMate): mọi nguồn + kết quả kiểm — chỉ khi bật nhật ký.
+            func f(_ r: NSRect?) -> String { r.map { String(format: "(%.0f,%.0f %.0fx%.0f)", $0.minX, $0.minY, $0.width, $0.height) } ?? "nil" }
+            let fr = posClient.flatMap(Self.imkCaretRect), lr = posClient.flatMap(Self.imkLineRect)
+            let ac = ax?.caretBounds()
+            func ok(_ r: NSRect?) -> String { r.map { CaretHintLogic.plausibleCaret($0, field: field, window: frontWindow, screens: screens) ? "ok" : "rej" } ?? "-" }
+            DebugLog.log("caret diag: sel=\(posClient?.selectedRange().location ?? -1) first=\(f(fr))\(ok(fr)) line=\(f(lr))\(ok(lr)) ax=\(f(ac))\(ok(ac)) field=\(f(field)) win=\(f(frontWindow)) mouse=\(f(NSRect(origin: NSEvent.mouseLocation, size: .zero)))")
+        }
         let found = CaretHintLogic.anchor(field: field, window: frontWindow, screens: screens) { src in
             switch src {
             case .imkFirstRect:

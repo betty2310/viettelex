@@ -233,8 +233,10 @@ final class CaretHintTests: XCTestCase {
         var (src, asked) = pick([.imkFirstRect: caret, .axCaret: caret], field: field)
         XCTAssertEqual(src, .imkFirstRect); XCTAssertEqual(asked, [.imkFirstRect])   // không gọi AX thừa
         (src, asked) = pick([.axCaret: caret], field: field)
-        XCTAssertEqual(src, .axCaret); XCTAssertEqual(asked, [.imkFirstRect, .imkLineRect, .axCaret])
+        XCTAssertEqual(src, .axCaret); XCTAssertEqual(asked, [.imkFirstRect, .axCaret])
         (src, _) = pick([.imkLineRect: caret, .axCaret: caret], field: field)
+        XCTAssertEqual(src, .axCaret)                                                // TextMate: AX đúng hơn rect dòng
+        (src, _) = pick([.imkLineRect: caret], field: field)
         XCTAssertEqual(src, .imkLineRect)                                            // #104 Firefox: AX mù
         (src, _) = pick([.axPrevChar: caret], field: field)
         XCTAssertEqual(src, .axPrevChar)
@@ -394,3 +396,36 @@ final class CaretHintTests: XCTestCase {
         XCTAssertTrue(CaretHint.shared.numberEnabled)
     }
 }
+
+/// TextMate (Phil 04/10/2026, log "caret diag"): firstRect rác, rect dòng IMK lệch, AX đúng.
+/// Ô gợi ý phải neo theo AX — nằm ngay dưới chữ đang gõ, không theo rect dòng.
+final class CaretHintTextMateTests: XCTestCase {
+    typealias L = CaretHintLogic
+    func testTextMatePrefersAXOverIMKLineRect() {
+        let screens = [NSRect(x: 0, y: 0, width: 1710, height: 1112)]
+        let win = NSRect(x: 0, y: 62, width: 1710, height: 1011)
+        let field = NSRect(x: 43, y: 87, width: 1667, height: 958)
+        let cases: [(first: NSRect, line: NSRect, ax: NSRect)] = [
+            (NSRect(x: 0, y: 328353, width: 0, height: 1), NSRect(x: 152, y: 954, width: 1, height: 19), NSRect(x: 86, y: 989, width: 1, height: 16)),
+            (NSRect(x: 0, y: 328357, width: 0, height: 1), NSRect(x: 253, y: 922, width: 1, height: 19), NSRect(x: 86, y: 957, width: 1, height: 16)),
+            (NSRect(x: 0, y: 328361, width: 0, height: 1), NSRect(x: 340, y: 890, width: 1, height: 19), NSRect(x: 86, y: 925, width: 1, height: 16)),
+        ]
+        for c in cases {
+            let r = L.anchor(field: field, window: win, screens: screens) { src in
+                switch src {
+                case .imkFirstRect: return c.first
+                case .imkLineRect: return c.line
+                case .axCaret: return c.ax
+                default: return nil
+                }
+            }
+            XCTAssertEqual(r?.source, .axCaret)
+            XCTAssertEqual(r?.rect, c.ax)
+            // Ô gợi ý đặt DƯỚI dòng đang gõ: đỉnh ô ≤ đáy rect con trỏ.
+            let size = NSSize(width: 140, height: 28)
+            let o = TextToolsPanelLogic.origin(caret: c.ax, panelSize: size, visible: screens[0])
+            XCTAssertLessThanOrEqual(o.y + size.height, c.ax.minY + 0.5)
+        }
+    }
+}
+
