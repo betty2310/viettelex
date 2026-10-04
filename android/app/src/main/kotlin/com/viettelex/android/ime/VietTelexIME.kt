@@ -902,6 +902,9 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     override fun onPlaneChanged(plane: Plane) {
         strip?.setPlane(plane)
+        // Về chữ: viết hoa đầu câu theo context lúc đó (". " tự thêm ở plane 123 ⇒ hoa) —
+        // một lần đọc context mỗi lần đổi plane, không mỗi phím.
+        if (inputShown && fieldReady && PlanePolicy.reevaluatesShift(plane)) applyAutoShift()
     }
 
     override fun emojiRecents(): List<String> = EmojiRecents.decode(prefs.getString(Keys.EMOJI_RECENTS, null))
