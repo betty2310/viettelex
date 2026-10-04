@@ -76,6 +76,11 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     private var clipOpen = false
     private var lastSig = ""
     private var lastSet: SuggestionSet? = null
+    /** Bar đang có nội dung gợi ý (chữ/emoji/chip/thẻ Dán/pill) ⇒ ẩn icon con trỏ + 📋 (#113). */
+    private var hasContent = false
+
+    /** Icon con trỏ + 📋 có hiện không — chỉ đổi khi nội dung rỗng↔có (StripGeometry.toolsShown). */
+    private fun tools(): Boolean = StripGeometry.toolsShown(hasContent, plane == Plane.EDIT, clipOpen)
 
     private val wordPaint = TextPaint(theme.text(StripGeometry.WORD_SP))
     private val wordOff = theme.centerOffset(wordPaint)
@@ -119,9 +124,9 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     }
 
     /** Bề rộng dành cho 📋 / 🕶 bên trái ⌄. */
-    private fun extraW(): Float = if (clipButton) theme.dp(CLIP_W) else 0f
+    private fun extraW(): Float = if (clipButton && tools()) theme.dp(CLIP_W) else 0f
     /** Lề mỗi bên cho pill căn giữa: zone + phần lớn hơn giữa icon con trỏ (trái) và 📋/🕶 (phải). */
-    private fun sideW(): Float = theme.dp(KeyLayout.STRIP_ZONE_W) + maxOf(theme.dp(STRIP_TOOL_W), extraW())
+    private fun sideW(): Float = theme.dp(KeyLayout.STRIP_ZONE_W) + maxOf(if (tools()) theme.dp(STRIP_TOOL_W) else 0f, extraW())
 
     /** Nút 📋 (lịch sử bật) + chỉ báo ẩn danh; [open] = bảng lịch sử đang mở (tô đậm). */
     fun setExtras(clipButton: Boolean, open: Boolean = clipOpen) {
@@ -154,8 +159,10 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
 
     fun setPlane(p: Plane) {
         if (p == plane) return
+        val before = tools()
         plane = p
         if (p == Plane.EMOJI || p == Plane.EMOJI_SEARCH) paste = false
+        if (tools() != before) { lastSet?.let { layoutSlots(it) }; layoutPaste() }
         invalidate()
     }
 
@@ -164,7 +171,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     private fun clearContent() {
         for (i in 0..2) { slotText[i] = null; slotPayload[i] = null; emojiText[i] = null }
         emojiCount = 0; paste = false; chipCount = 0; actionPill = null
-        lastSet = null
+        lastSet = null; hasContent = false
     }
 
     /** Vuốt ⌫: đoạn sẽ xoá (null = gỡ). */
@@ -207,14 +214,19 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
 
     private fun layoutSlots(set: SuggestionSet) {
         val disp = arrayOfNulls<String>(3)
+        val toolsBefore = tools()
         clearContent()
         lastSet = set
-        // Trái: ô mẫu câu + icon con trỏ (bảng sửa); phải: 📋 / 🕶 (extraW) + ⌄.
-        val barL = theme.dp(KeyLayout.STRIP_ZONE_W + STRIP_TOOL_W)
-        val barR = width - theme.dp(KeyLayout.STRIP_ZONE_W) - extraW()
         // Thứ tự ưu tiên slot (hoàn tác > clipboard > Thêm dấu > chip số > chữ): SuggestionSlots.
         // Gboard: từ kế tiếp tốt nhất ở GIỮA; không ngoặc kép quanh nguyên văn.
-        when (val l = SuggestionSlots.arrange(set, undoAsPill = true, bestInMiddle = true, pasteLabel = pasteTitleText)) {
+        val l = SuggestionSlots.arrange(set, undoAsPill = true, bestInMiddle = true, pasteLabel = pasteTitleText)
+        hasContent = StripGeometry.hasContent(l, set.idle)
+        val shown = tools()
+        if (shown != toolsBefore) layoutPaste()
+        // Trái: ô mẫu câu + icon con trỏ (bảng sửa); phải: 📋 + ⌄. Có gợi ý ⇒ ẩn con trỏ/📋 (#113).
+        val barL = theme.dp(StripGeometry.barLeft(KeyLayout.STRIP_ZONE_W, STRIP_TOOL_W, shown))
+        val barR = theme.dp(StripGeometry.barRight(width / d, KeyLayout.STRIP_ZONE_W, CLIP_W, clipButton, shown))
+        when (l) {
             is BarLayout.Pill -> { actionPill = l.chip; return }
             BarLayout.PasteCard -> { paste = true; return }
             is BarLayout.Chips -> {
@@ -317,8 +329,8 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
             iconPaint.color = theme.withAlpha(theme.ink, if (active) 1f else 0.75f)
             ImeIcons.draw(c, ImeIcons.GRID, bx, cy, theme.dp(StripGeometry.iconDp(o)), iconPaint)
         }
-        run {
-            // Icon con trỏ (bảng sửa văn bản) cạnh ô mẫu câu.
+        if (tools()) {
+            // Icon con trỏ (bảng sửa văn bản) cạnh ô mẫu câu — ẩn khi đang có gợi ý (#113).
             val ex = theme.dp(88f) + (theme.dp(KeyLayout.STRIP_ZONE_W + STRIP_TOOL_W / 2) - theme.dp(88f)) * o
             val active = plane == Plane.EDIT && o > 0.5f
             if (active || pressed == T_EDIT) c.drawCircle(ex, cy, theme.dp(18f), chipPaint)
@@ -372,7 +384,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
 
     /** 📋 (bấm được) bên trái ⌄; thu gọn thì nhỏ lại ở hàng nổi. Không có chỉ báo ẩn danh (Phil 27/09 bỏ). */
     private fun drawExtras(c: Canvas, w: Float, cy: Float, o: Float) {
-        if (!clipButton) return
+        if (!clipButton || !tools()) return
         val zoneL = w - theme.dp(KeyLayout.STRIP_ZONE_W) * o - theme.dp(48f) * (1f - o)
         var x = zoneL
         if (clipButton) {
@@ -463,9 +475,10 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         if (y > strip) return T_NONE          // không lấn hàng Q–P
         val zone = theme.dp(KeyLayout.STRIP_ZONE_W)
         if (x < zone) return if (templatesEnabled) T_BURGER else T_NONE
-        if (x < zone + theme.dp(STRIP_TOOL_W)) return T_EDIT
+        val tools = tools()
+        if (tools && x < zone + theme.dp(STRIP_TOOL_W)) return T_EDIT
         if (x >= w - zone) return T_CHEVRON
-        if (clipButton && x >= w - zone - theme.dp(CLIP_W)) return T_CLIP
+        if (clipButton && tools && x >= w - zone - theme.dp(CLIP_W)) return T_CLIP
         if (x >= w - zone - extraW()) return T_NONE
         if (swipePreview != null) return T_NONE
         if (restoreOffer) return T_RESTORE
@@ -516,8 +529,8 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         private const val T_CLIP = 8
         private const val T_PILL = 9
         /** Bề ngang ô icon con trỏ (sau ô mẫu câu), dp. */
-        const val STRIP_TOOL_W = 44f
+        const val STRIP_TOOL_W = StripGeometry.TOOL_W
         private const val LONG_MS = 450L
-        private const val CLIP_W = 40f
+        private const val CLIP_W = StripGeometry.CLIP_W
     }
 }

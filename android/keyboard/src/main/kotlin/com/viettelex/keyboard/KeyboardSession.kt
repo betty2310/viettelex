@@ -115,13 +115,18 @@ data class SuggestionSet(
     /** Chip hành động ở slot trái khi chưa gõ ("Thêm dấu" / "↩︎ Hoàn tác") — payload [action]. */
     val actionLabel: String? = null,
     val action: String? = null,
+    /**
+     * Chưa có ngữ cảnh gõ (ô trống / chưa có từ trước, không đang soạn) — từ phổ biến chỉ là
+     * đệm. StripView (#113): idle ⇒ vẫn hiện icon con trỏ + 📋 như Gboard khi chưa gõ.
+     */
+    val idle: Boolean = false,
 ) {
     val isEmpty: Boolean get() = literal == null && word == null && word2 == null && emojis.isEmpty() &&
         nextWords.isEmpty() && number == null && math == null
     /** So để bỏ vẽ lại khi không đổi. */
     fun signature(): String = listOf(literal, word, word2, emojis.joinToString("\u0002"),
         nextWords.joinToString("\u0002"), paste.toString(), number, math,
-        clipChips.joinToString("\u0002") { it.label + "\u0003" + it.value }, action, actionLabel).joinToString("\u0001")
+        clipChips.joinToString("\u0002") { it.label + "\u0003" + it.value }, action, actionLabel, idle.toString()).joinToString("\u0001")
 
     companion object {
         /** Payload chạm thẻ Dán → truyền vào acceptSuggestion. */
@@ -977,7 +982,8 @@ class KeyboardSession(
         val offer = literal == null && !bridge.englishMode && addTonesPlan(proxy) != null
         return SuggestionPlan.Ready(SuggestionSet(literal = literal, nextWords = next, paste = paste,
             number = number, math = math, clipChips = chips,
-            actionLabel = if (offer) ADD_TONES_LABEL else null, action = if (offer) SuggestionSet.ADD_TONES_TOKEN else null))
+            actionLabel = if (offer) ADD_TONES_LABEL else null, action = if (offer) SuggestionSet.ADD_TONES_TOKEN else null,
+            idle = prev == null && literal == null && number == null && math == null && !offer))
     }
 
     /**

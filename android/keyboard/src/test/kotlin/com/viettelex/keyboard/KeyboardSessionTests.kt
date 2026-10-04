@@ -39,6 +39,17 @@ class KeyboardSessionTests {
         assertEquals(listOf("Em", "Anh", "Tôi"), set.nextWords)   // đầu câu ⇒ viết hoa
     }
 
+    @Test fun testIdleFlagOnlyForEmptyContext() {
+        // #113: ô trống ⇒ idle (strip vẫn hiện icon con trỏ/📋); sau một từ / đang soạn ⇒ không.
+        val s = session(traits = FieldTraits()); val p = MockProxy()
+        assertTrue(s.suggestionsNow(p)!!.idle)
+        s.typeKeys(p, "camr ")
+        assertFalse(s.suggestionsNow(p)!!.idle)
+        val s2 = session(traits = FieldTraits()); val p2 = MockProxy()
+        s2.typeKeys(p2, "ng")
+        assertFalse(s2.suggestionsNow(p2)!!.idle)
+    }
+
     @Test fun testNextWordsAfterSpace() {
         val s = session(traits = FieldTraits()); val p = MockProxy()
         s.typeKeys(p, "camr ")

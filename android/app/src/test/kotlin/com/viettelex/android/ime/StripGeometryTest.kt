@@ -3,7 +3,9 @@ package com.viettelex.android.ime
 import com.viettelex.keyboard.BarLayout
 import com.viettelex.keyboard.SuggestionSet
 import com.viettelex.keyboard.SuggestionSlots
+import com.viettelex.keyboard.ClipChip
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,5 +39,52 @@ class StripGeometryTest {
         // Có chữ gợi ý + thẻ Dán ⇒ chỉ thẻ Dán (không slot nào vẽ chồng).
         val set = SuggestionSet(literal = "xin", word = "xin", word2 = "xinh", paste = true)
         assertSame(BarLayout.PasteCard, SuggestionSlots.arrange(set, undoAsPill = true, bestInMiddle = true))
+    }
+
+    // #113: đang gõ có gợi ý ⇒ ẩn icon con trỏ + 📋, 3 slot ăn phần trống; ☰/⌄ giữ nguyên.
+    private fun slotWidth(width: Float, clipButton: Boolean, tools: Boolean): Float {
+        val l = FloatArray(3); val r = FloatArray(3)
+        val zone = KeyLayout.STRIP_ZONE_W
+        StripGeometry.thirds(StripGeometry.barLeft(zone, StripGeometry.TOOL_W, tools),
+            StripGeometry.barRight(width, zone, StripGeometry.CLIP_W, clipButton, tools), l, r)
+        for (i in 0..2) assertEquals(r[0] - l[0], r[i] - l[i], 0.001f)   // vẫn 3 ô bằng nhau
+        return r[0] - l[0]
+    }
+
+    @Test fun suggestionsWidenSlotsByHidingTools() {
+        val w = 411f
+        // Idle (không gợi ý): như cũ — ☰ zone + con trỏ 44 + … + 📋 40 + ⌄ zone.
+        assertEquals((w - 2 * 52f - 44f - 40f) / 3f, slotWidth(w, clipButton = true, tools = true), 0.001f)
+        assertEquals((w - 2 * 52f - 44f) / 3f, slotWidth(w, clipButton = false, tools = true), 0.001f)
+        // Có gợi ý: chỉ trừ 2 zone (☰, ⌄) — mỗi slot rộng thêm (44 + 40) / 3 dp.
+        val wide = slotWidth(w, clipButton = true, tools = false)
+        assertEquals((w - 2 * 52f) / 3f, wide, 0.001f)
+        assertEquals(28f, wide - slotWidth(w, clipButton = true, tools = true), 0.001f)
+        assertEquals(wide, slotWidth(w, clipButton = false, tools = false), 0.001f)
+        assertEquals(52f, StripGeometry.barLeft(52f, 44f, toolsShown = false), 0.001f)
+    }
+
+    @Test fun toolsHiddenOnlyWhileContent() {
+        assertTrue(StripGeometry.toolsShown(hasContent = false, editOpen = false, clipOpen = false))
+        assertFalse(StripGeometry.toolsShown(hasContent = true, editOpen = false, clipOpen = false))
+        // Bảng sửa / lịch sử clipboard đang mở ⇒ icon vẫn hiện để đóng được.
+        assertTrue(StripGeometry.toolsShown(hasContent = true, editOpen = true, clipOpen = false))
+        assertTrue(StripGeometry.toolsShown(hasContent = true, editOpen = false, clipOpen = true))
+    }
+
+    private fun content(set: SuggestionSet) =
+        StripGeometry.hasContent(SuggestionSlots.arrange(set, undoAsPill = true, bestInMiddle = true), set.idle)
+
+    @Test fun whatCountsAsContent() {
+        assertFalse(content(SuggestionSet()))                                       // trống
+        assertFalse(content(SuggestionSet(nextWords = listOf("tôi", "em", "anh"), idle = true)))  // ô trống: chữ đệm
+        assertTrue(content(SuggestionSet(literal = "xin", word = "xin", word2 = "xinh")))         // đang soạn
+        assertTrue(content(SuggestionSet(nextWords = listOf("chào", "bạn", "anh"))))              // sau một từ
+        assertTrue(content(SuggestionSet(nextWords = listOf("gmail.com", "yahoo.com"))))          // chip email @
+        assertTrue(content(SuggestionSet(number = "1.000")))                                      // chip số
+        assertTrue(content(SuggestionSet(math = "= 4")))                                          // phép tính
+        assertTrue(content(SuggestionSet(paste = true, idle = true)))                             // thẻ Dán
+        assertTrue(content(SuggestionSet(paste = true, clipChips = listOf(ClipChip(ClipChip.Kind.OTP, "482913", "OTP 482913")))))
+        assertTrue(content(SuggestionSet(emojis = listOf("😀"))))
     }
 }
