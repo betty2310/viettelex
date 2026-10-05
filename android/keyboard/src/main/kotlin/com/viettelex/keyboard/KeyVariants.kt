@@ -10,7 +10,9 @@ package com.viettelex.keyboard
  * Lệch có chủ đích (pinned bởi KeyVariantsTests.matchesSwiftTable): [ANDROID_ONLY] (₫ là phím
  * gốc trên bàn 123 Android, giữ ⇒ $ € £ …) và [IOS_ONLY] ($ không còn là phím trên Android).
  *
- * Thứ tự = từ phím ra ngoài: ô 0 là ký tự GỐC (mặc định được chọn khi popup mở, như stock).
+ * Thứ tự = từ phím ra ngoài: ô 0 là ký tự GỐC (mặc định được chọn khi popup mở, như stock) —
+ * trừ [HOLD_PRESELECT]: ô 0 là ký tự hay muốn khi đã GIỮ phím, gốc đứng ô 1 (như giữ "," chọn
+ * sẵn "." — [CommaPopup]). Chạm vẫn ra ký tự gốc.
  *
  * Bàn CHỮ không có biến thể: giữ phím chữ đã là ký tự phụ số/ký hiệu ([KeyAlternates] —
  * q…p → 1…0, a → @…) và "," → "."; dấu tiếng Việt gõ bằng Telex/VNI.
@@ -28,8 +30,9 @@ object KeyVariants {
         "0" to listOf("0", "°"),
         "-" to listOf("-", "–", "—", "•"),
         "/" to listOf("/", "\\"),
-        // Android: ₫ là phím gốc (Gboard đặt $ ở đây) — giữ ra các tiền tệ khác.
-        "₫" to listOf("₫", "\$", "€", "£", "¥", "₩", "₹", "¢"),
+        // Android: ₫ là phím gốc (Gboard đặt $ ở đây) — giữ ra các tiền tệ khác; "$" ô 0 = chọn
+        // sẵn (#113: giữ rồi nhả tại chỗ ⇒ "$", chạm vẫn "₫").
+        "₫" to listOf("\$", "₫", "€", "£", "¥", "₩", "₹", "¢"),
         "&" to listOf("&", "§"),
         "." to listOf(".", "…"),
         "?" to listOf("?", "¿"),
@@ -50,6 +53,8 @@ object KeyVariants {
 
     /** Khoá chỉ Android có (không có trong bảng Swift). */
     val ANDROID_ONLY: Set<String> = setOf("₫")
+    /** Khoá có ô 0 ≠ ký tự gốc (gốc ở ô 1): giữ rồi nhả tại chỗ ra ô 0, chạm vẫn ra gốc. */
+    val HOLD_PRESELECT: Set<String> = setOf("₫")
     /** Khoá chỉ iOS có (bảng Swift) — phím đó không còn trên bàn số / ký hiệu Android. */
     val IOS_ONLY: Set<String> = setOf("\$")
 

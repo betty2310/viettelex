@@ -19,7 +19,8 @@ class KeyVariantsTests {
     @Test fun everyEntryStartsWithItsBaseAndIsOnAPlane() {
         val onPlanes = (numbersKeys + symbolsKeys).toSet()
         for ((key, list) in KeyVariants.table) {
-            assertEquals("ô 0 = ký tự gốc — $key", key, list.first())
+            // ô 0 = ký tự gốc (chọn sẵn); HOLD_PRESELECT: gốc ở ô 1, ô 0 là ký tự chọn sẵn khi giữ.
+            assertEquals("ô gốc — $key", key, list[if (key in KeyVariants.HOLD_PRESELECT) 1 else 0])
             assertTrue(key, list.size >= 2)
             assertEquals("$key: trùng biến thể", list.size, list.toSet().size)
             assertTrue("$key không có trên bàn số/ký hiệu", key in onPlanes)
@@ -38,8 +39,8 @@ class KeyVariantsTests {
         assertEquals(listOf("/", "\\"), t["/"])
         assertEquals(listOf("&", "§"), t["&"])
         assertEquals(listOf("%", "‰"), t["%"])
-        // Android: ₫ là phím gốc (#113), giữ ⇒ $ € £ ¥ ₩ ₹ ¢.
-        assertEquals(listOf("₫", "\$", "€", "£", "¥", "₩", "₹", "¢"), t["₫"])
+        // Android: ₫ là phím gốc (#113), giữ ⇒ "$" chọn sẵn, rồi ₫ € £ ¥ ₩ ₹ ¢.
+        assertEquals(listOf("\$", "₫", "€", "£", "¥", "₩", "₹", "¢"), t["₫"])
         assertEquals(listOf("=", "≠", "≈"), t["="])
         assertEquals(listOf("+", "±"), t["+"])
         assertEquals(listOf("*", "×"), t["*"])
@@ -52,6 +53,34 @@ class KeyVariantsTests {
         assertEquals("không đè giữ q…p", emptyList<String>(), KeyVariants.variants("e", symbolPlane = false))
         assertEquals("ô số: không", emptyList<String>(), KeyVariants.variants("0", symbolPlane = true, numericField = true))
         assertEquals("phím không có biến thể", emptyList<String>(), KeyVariants.variants("@", symbolPlane = true))
+    }
+
+    /** #113: HOLD_PRESELECT chỉ gồm phím Android có thật trong bảng (iOS không có ₫ gốc). */
+    @Test fun holdPreselectKeys() {
+        assertEquals(setOf("₫"), KeyVariants.HOLD_PRESELECT)
+        assertTrue(KeyVariants.HOLD_PRESELECT.all { it in KeyVariants.table && it in KeyVariants.ANDROID_ONLY })
+    }
+
+    /** Giữ ₫ rồi nhả tại chỗ ⇒ "$"; trượt một ô ⇒ "₫"; chạm (không giữ) ⇒ "₫". */
+    @Test fun dongHoldReleaseInPlaceTypesDollar() {
+        val choices = KeyVariants.variants("₫", symbolPlane = true)
+        val itemW = 38f; val keyX = 120f
+        val layout = DomainPopup.layout(keyX, itemW, choices.size, 600f)
+        fun hold(slide: Float?): List<String> {
+            val commits = KeyCommitQueue(); val key = Any(); val out = ArrayList<String>()
+            commits.arm(key) { out += "₫" }
+            val h = DomainPopup.Hold(choices)
+            assertTrue(h.fire(commits, key, layout, 0f, 100f, keyX, 80f) { out += it })
+            if (slide != null) h.move(slide, 80f)
+            commits.release(key)
+            return out
+        }
+        assertEquals(listOf("\$"), hold(null))
+        assertTrue(!layout.mirrored)
+        assertEquals(listOf("₫"), hold(keyX + itemW))       // một ô theo hướng hàng loe ⇒ ₫
+        val tap = KeyCommitQueue(); val k = Any(); val out = ArrayList<String>()
+        tap.arm(k) { out += "₫" }; tap.release(k)
+        assertEquals(listOf("₫"), out)
     }
 
     /**

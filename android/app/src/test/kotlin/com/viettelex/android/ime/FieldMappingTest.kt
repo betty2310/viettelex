@@ -234,4 +234,43 @@ class FieldMappingTest {
             EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))                   // ẩn danh (Chrome…)
         assertEquals(StripMode.BLANK, strip(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_NO_SUGGESTIONS, incognito = true))
     }
+
+    /**
+     * #113: thanh địa chỉ Firefox gõ "bình" hiện "Thường | Tĩnh | Dương" ⇒ ô địa chỉ / tìm kiếm
+     * gợi ý chữ thường. inputType/imeOptions thật của Firefox chưa đo được — phủ các dạng
+     * omnibox hay gặp: textUri + actionGo (Fenix toolbar), URI có cờ CAP/AUTO_COMPLETE, web
+     * edit text / text thường với Go/Search, FILTER.
+     */
+    @Test fun addressAndSearchFieldsLowercaseSuggestions() {
+        val ui = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+        val omni = listOf(
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI, EditorInfo.IME_ACTION_GO or ui),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI or TYPE_TEXT_FLAG_AUTO_COMPLETE, EditorInfo.IME_ACTION_GO or ui or
+                EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING),                       // Firefox riêng tư
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI or TYPE_TEXT_FLAG_CAP_SENTENCES),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_WEB_EDIT_TEXT, EditorInfo.IME_ACTION_GO),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_WEB_EDIT_TEXT, EditorInfo.IME_ACTION_SEARCH),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_CAP_SENTENCES, EditorInfo.IME_ACTION_SEARCH or ui),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_FILTER),
+        )
+        for (c in omni) {
+            assertTrue(c.lowercaseSuggestions)
+            assertTrue("vẫn có gợi ý", c.suggestionsAllowed)
+            assertFalse("vẫn gõ Telex", c.passthrough)
+        }
+        // Ô chữ thường / chat / mật khẩu / email / nhiều dòng (Enter xuống dòng): giữ hoa/thường như cũ.
+        for (c in listOf(
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_CAP_SENTENCES),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_CAP_SENTENCES, EditorInfo.IME_ACTION_SEND),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_WEB_EDIT_TEXT, EditorInfo.IME_ACTION_DONE),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_MULTI_LINE, EditorInfo.IME_ACTION_SEARCH),
+            m(TYPE_CLASS_TEXT, EditorInfo.IME_ACTION_SEARCH or EditorInfo.IME_FLAG_NO_ENTER_ACTION),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_PASSWORD, EditorInfo.IME_ACTION_GO),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_EMAIL_ADDRESS),
+            m(TYPE_CLASS_NUMBER, EditorInfo.IME_ACTION_SEARCH),
+        )) assertFalse(c.lowercaseSuggestions)
+        // Chrome omnibox: NO_SUGGESTIONS ⇒ không có gợi ý chữ (chỉ thanh công cụ), vẫn đánh dấu ô địa chỉ.
+        val chrome = m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI or TYPE_TEXT_FLAG_NO_SUGGESTIONS, EditorInfo.IME_ACTION_GO)
+        assertFalse(chrome.suggestionsAllowed); assertTrue(chrome.lowercaseSuggestions)
+    }
 }

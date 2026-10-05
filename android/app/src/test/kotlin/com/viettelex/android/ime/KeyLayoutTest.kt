@@ -223,7 +223,7 @@ class KeyLayoutTest {
         val onPlanes = (typed(build(Plane.NUMBERS)) + typed(build(Plane.SYMBOLS))).toSet()
         for (key in com.viettelex.keyboard.KeyVariants.table.keys) assertTrue("$key không có trên plane", key in onPlanes)
         val v = { s: String -> com.viettelex.keyboard.KeyVariants.variants(s, symbolPlane = true) }
-        assertEquals(listOf("₫", "\$", "€", "£", "¥", "₩", "₹", "¢"), v("₫"))
+        assertEquals(listOf("\$", "₫", "€", "£", "¥", "₩", "₹", "¢"), v("₫"))   // giữ ₫ chọn sẵn $ (#113)
         assertEquals(listOf("-", "–", "—", "•"), v("-"))
         assertEquals(listOf("\"", "”", "“", "„", "»", "«"), v("\""))
         assertEquals(listOf("'", "‘", "’", "`"), v("'"))

@@ -39,6 +39,11 @@ data class FieldConfig(
      * Trang (NO_SUGGESTIONS). Chỉ ô CHỮ không mật khẩu; bàn số/TYPE_NULL/mật khẩu: dải trống.
      */
     val stripTools: Boolean = false,
+    /**
+     * Ô địa chỉ / tìm kiếm (URI, FILTER, hoặc ô một dòng có Enter = Go/Search — thanh địa chỉ
+     * Firefox, #113): gợi ý chữ thường, không viết hoa đầu câu / tên riêng.
+     */
+    val lowercaseSuggestions: Boolean = false,
 )
 
 object FieldMapping {
@@ -133,7 +138,23 @@ object FieldMapping {
             noLearning = (imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0,
             multiLine = multiLine,
             holdNewline = allowsHoldNewline(multiLine, secure, rawKeys),
-            stripTools = text && !secure)
+            stripTools = text && !secure,
+            lowercaseSuggestions = isAddressOrSearch(inputType, imeOptions, multiLine, secure))
+    }
+
+    /**
+     * Ô địa chỉ / tìm kiếm ⇒ gợi ý chữ thường (#113: thanh địa chỉ Firefox gõ "bình" hiện
+     * "Thường | Tĩnh | Dương"). TYPE_TEXT_VARIATION_URI (omnibox), FILTER (ô lọc/tìm), hoặc ô chữ
+     * MỘT dòng mà Enter = IME_ACTION_GO / SEARCH (Firefox/GeckoView, WEB_EDIT_TEXT có Go/Search).
+     * Nhiều dòng (Enter xuống dòng) / mật khẩu: không.
+     */
+    fun isAddressOrSearch(inputType: Int, imeOptions: Int, multiLine: Boolean, secure: Boolean): Boolean {
+        if (secure || (inputType and InputType.TYPE_MASK_CLASS) != InputType.TYPE_CLASS_TEXT) return false
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+        if (variation == InputType.TYPE_TEXT_VARIATION_URI || variation == InputType.TYPE_TEXT_VARIATION_FILTER) return true
+        val action = imeOptions and EditorInfo.IME_MASK_ACTION
+        return !multiLine && (imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) == 0 &&
+            (action == EditorInfo.IME_ACTION_GO || action == EditorInfo.IME_ACTION_SEARCH)
     }
 
     /**

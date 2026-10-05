@@ -62,6 +62,11 @@ data class FieldTraits(
      * Trang, #113). FieldMapping.map tính; mặc định false = như cũ (dải trống).
      */
     val stripTools: Boolean = false,
+    /**
+     * Ô địa chỉ / tìm kiếm (FieldMapping.isAddressOrSearch — thanh địa chỉ Firefox, #113): gợi ý
+     * luôn chữ thường (không tên riêng [DisplayCase], không hoa đầu câu) và không auto-shift.
+     */
+    val lowercaseSuggestions: Boolean = false,
 ) {
     /** Cách ghi chữ vào ô theo app (bảng [WriteMode.forPackage]). */
     val writeMode: WriteMode get() = WriteMode.forPackage(packageName)
@@ -545,6 +550,9 @@ class KeyboardSession(
     fun updateAutoShift(proxy: TextProxy): Boolean? {
         // Tắt: không đọc context; chỉ hạ shift do chính mình bật trước đó (shift tay giữ nguyên).
         if (!autoCapitalize) return if (autoShiftOn) { autoShiftOn = false; false } else null
+        // Ô địa chỉ / tìm kiếm: không bao giờ hoa đầu câu — chỉ hạ shift do mình bật (kể cả còn
+        // sót từ ô trước); shift tay giữ nguyên.
+        if (traits.lowercaseSuggestions) return if (autoShiftOn) { autoShiftOn = false; false } else null
         val mode = capMode(traits)
         if (mode == CapMode.NONE) return null
         val before = proxy.contextBeforeInput()
@@ -939,13 +947,21 @@ class KeyboardSession(
 
     // MARK: gợi ý
 
-    private fun caseForContext(w: String) = if (autoShiftOn) Cp.capitalizeFirst(w) else w
+    private fun caseForContext(w: String) = when {
+        traits.lowercaseSuggestions -> w.lowercase()
+        autoShiftOn -> Cp.capitalizeFirst(w)
+        else -> w
+    }
+
+    /** Hoa/thường hiển thị của gợi ý: [DisplayCase] (tên riêng), trừ ô địa chỉ / tìm kiếm ⇒ chữ thường. */
+    private fun displayCase(w: String, after: String? = null) =
+        if (traits.lowercaseSuggestions) w.lowercase() else DisplayCase.apply(w, after)
 
     private fun padWords(base: List<String>, need: Int, typed: String = ""): List<String> {
         if (base.size >= need) return base.take(need)
         val top = if (bridge.englishMode) SwipeEnglish.top else langModel.topWords(need + 12)
         val cands = SensitiveWords.filter(top, filterSensitive)
-            .map { caseForContext(DisplayCase.apply(it)) }
+            .map { caseForContext(displayCase(it)) }
         return SuggestionFill.pad(base, cands, need, typed)
     }
 
@@ -995,10 +1011,10 @@ class KeyboardSession(
             val personal = SensitiveWords.filter(langModel.nextWords(prev, p2, 6), filterSensitive)
             val n = SuggestRank.nextFill(prev, p2, personal, { w -> if (p2 == null) 0 else langModel.trigramCount(p2, prev, w) },
                 { SensitiveWords.filter(it, filterSensitive) })
-            padWords(n.map { caseForContext(DisplayCase.apply(it, prev)) }, 3)
+            padWords(n.map { caseForContext(displayCase(it, prev)) }, 3)
         } else {
             val top = SensitiveWords.filter(langModel.topWords(6), filterSensitive)
-                .take(3).map { caseForContext(DisplayCase.apply(it)) }
+                .take(3).map { caseForContext(displayCase(it)) }
             padWords(top, 3)
         }
         val number = refreshNumberChip(proxy)
@@ -1100,8 +1116,8 @@ class KeyboardSession(
             val ctx = ctxCache
             val ranked = SensitiveWords.filter(
                 SuggestRank.rankInline(pool, pmi, Cp.count(composed), langModel::count, ctx), filterSensitive)
-            word = ranked.firstOrNull()?.let { DisplayCase.apply(it, lastWord) }
-            word2 = ranked.getOrNull(1)?.let { DisplayCase.apply(it, lastWord) }
+            word = ranked.firstOrNull()?.let { displayCase(it, lastWord) }
+            word2 = ranked.getOrNull(1)?.let { displayCase(it, lastWord) }
         } else if (fix != null) {
             word = fix
         }

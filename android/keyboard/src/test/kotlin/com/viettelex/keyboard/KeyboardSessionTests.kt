@@ -39,6 +39,43 @@ class KeyboardSessionTests {
         assertEquals(listOf("Em", "Anh", "Tôi"), set.nextWords)   // đầu câu ⇒ viết hoa
     }
 
+    /**
+     * #113: thanh địa chỉ / ô tìm kiếm (Firefox: "bình" ⇒ "Thường | Tĩnh | Dương") — gợi ý chữ
+     * thường: không hoa đầu câu, không tên riêng DisplayCase ("bình" → "dương" chứ không "Dương").
+     */
+    @Test fun testAddressFieldSuggestionsLowercase() {
+        val traits = FieldTraits(capSentences = true, urlField = true, lowercaseSuggestions = true)
+        val s = session(traits = traits); val p = MockProxy()
+        assertNull("không auto-shift đầu ô", s.updateAutoShift(p))
+        assertFalse(s.autoShiftOn)
+        assertEquals(listOf("em", "anh", "tôi"), s.suggestionsNow(p)!!.nextWords)
+        s.typeKeys(p, "binhf ")
+        assertEquals("bình ", p.text)
+        s.updateAutoShift(p)
+        val next = s.suggestionsNow(p)!!.nextWords
+        assertTrue(next.isNotEmpty())
+        assertEquals(next.map { it.lowercase() }, next)
+        // Ô thường cùng ngữ cảnh: tên riêng vẫn viết hoa (đối chứng).
+        val n = session(traits = FieldTraits()); val q = MockProxy()
+        n.typeKeys(q, "binhf ")
+        val normal = n.suggestionsNow(q)!!.nextWords
+        assertEquals(normal.map { it.lowercase() }, next)
+        // Đang soạn: gợi ý hoàn tất cũng chữ thường.
+        s.typeKeys(p, "duo")
+        val set = s.suggestionsNow(p)!!
+        for (w in listOfNotNull(set.word, set.word2)) assertEquals(w.lowercase(), w)
+    }
+
+    /** Ô trước bật auto-shift, ô địa chỉ kế tiếp hạ shift đó (không còn sót hoa). */
+    @Test fun testAddressFieldDropsStaleAutoShift() {
+        val s = session(); val p = MockProxy()
+        assertEquals(true, s.updateAutoShift(p))
+        s.startInput(KeyboardSettings(), FieldTraits(capSentences = true, lowercaseSuggestions = true))
+        assertEquals(false, s.updateAutoShift(p))
+        assertFalse(s.autoShiftOn)
+        assertEquals(listOf("em", "anh", "tôi"), s.suggestionsNow(p)!!.nextWords)
+    }
+
     @Test fun testIdleFlagOnlyForEmptyContext() {
         // #113: ô trống ⇒ idle (strip vẫn hiện icon con trỏ/📋); sau một từ / đang soạn ⇒ không.
         val s = session(traits = FieldTraits()); val p = MockProxy()
