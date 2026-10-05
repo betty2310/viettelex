@@ -87,6 +87,10 @@ struct KeyboardSettings {
     /// "Hiện kết quả phép tính": gõ "12*3=" → chip "36" ở slot đầu — mặc định BẬT; chỉ đọc
     /// context ngay sau phím "=", tắt ⇒ không làm gì.
     var mathResults = true
+    /// "Gợi ý cả khi ứng dụng tắt gợi ý" (#113, như Gboard/Laban) — mặc định BẬT: ô
+    /// autocorrection = .no không nhạy cảm vẫn gợi ý chữ (không tự sửa, không học). Tắt ⇒
+    /// như cũ: chỉ thanh công cụ (StripMode.tools). Song sinh Android `suggestInNoSuggestFields`.
+    var suggestInNoSuggestFields = true
     /// Emoji trên thanh gợi ý khi đang gõ — mặc định BẬT; tắt ⇒ không tra bảng emoji mỗi phím.
     var emojiSuggest = true
     /// Nút "Dán" nội dung vừa copy trên thanh gợi ý — mặc định BẬT; tắt ⇒ không hỏi
@@ -140,7 +144,7 @@ struct KeyboardSettings {
         }
         let flags: [(String, WritableKeyPath<KeyboardSettings, Bool>)] = [
             ("addTonesChip", \.addTonesChip), ("numberChips", \.numberChips),
-            ("mathResults", \.mathResults),
+            ("mathResults", \.mathResults), ("suggestInNoSuggestFields", \.suggestInNoSuggestFields),
             ("emojiSuggest", \.emojiSuggest), ("pasteButton", \.pasteButton),
             ("autoCapitalize", \.autoCapitalize), ("spaceSwipeLanguage", \.spaceSwipeLanguage),
             ("longPressNumbers", \.longPressNumbers), ("longPressSymbols", \.longPressSymbols),

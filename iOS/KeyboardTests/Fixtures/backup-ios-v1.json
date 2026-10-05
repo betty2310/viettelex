@@ -58,6 +58,7 @@
     "simpleTelex" : true,
     "smartTouch" : true,
     "spaceSwipeLanguage" : false,
+    "suggestInNoSuggestFields" : false,
     "swipeEnglish" : true,
     "swipeTyping" : true,
     "systemBackdropContrast" : false,

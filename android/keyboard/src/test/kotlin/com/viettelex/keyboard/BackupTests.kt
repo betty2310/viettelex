@@ -61,11 +61,12 @@ class BackupTests {
         val p = BackupCodec.decode(fixture("backup-ios-v1"))
         assertEquals("ios", p.platform)
         assertEquals(Instant.parse("2026-09-27T08:00:00Z"), p.createdAt)
-        assertEquals(36, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
+        assertEquals(37, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
         assertEquals("wood", p.settings!![Keys.KEY_SOUND_STYLE])
         assertEquals(true, p.settings!![Keys.KEY_SOUND])
         assertEquals(70, p.settings!![Keys.KEY_SOUND_VOLUME])
         assertEquals(true, p.settings!!["autoSpaceAfterPunct"])
+        assertEquals(false, p.settings!![Keys.SUGGEST_IN_NO_SUGGEST_FIELDS])   // #113, mặc định BẬT
         assertEquals("en", p.settings!![Keys.UI_LANGUAGE])   // ngôn ngữ giao diện (chuỗi) đi qua sao lưu
         assertEquals(40, p.settings!!["keyboardTransparency"])
         assertEquals(20, p.settings!!["keyLabelTransparency"])
@@ -125,7 +126,7 @@ class BackupTests {
             "keyboardTransparency" to 250, "keyLabelTransparency" to 35,
             BackupPrefs.SHORTCUTS_KEY to "# VietTelex — bảng gõ tắt\nko: không\n")
         val p = BackupPrefs.snapshot({ prefs[it] }, listOf(TemplateItem("", "a")), null)
-        assertEquals(41, p.settings!!.size)
+        assertEquals(42, p.settings!!.size)
         assertEquals("vi", p.settings!![Keys.UI_LANGUAGE])   // chưa chọn ⇒ mặc định Tiếng Việt
         assertEquals(100, p.settings!!["keyboardTransparency"])   // kẹp 0…100
         assertEquals(35, p.settings!!["keyLabelTransparency"])

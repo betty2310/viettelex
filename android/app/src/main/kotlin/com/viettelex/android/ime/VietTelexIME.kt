@@ -379,7 +379,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             initialCaps = info.initialCapsMode != 0, noLearning = field.noLearning,
             packageName = info.packageName, urlField = proxy.uriField,
             emailField = field.kind == InputKind.EMAIL, stripTools = field.stripTools,
-            lowercaseSuggestions = field.lowercaseSuggestions))
+            lowercaseSuggestions = field.lowercaseSuggestions, appNoSuggestions = field.appNoSuggestions))
         // Ngôn ngữ (vuốt phím cách) lưu riêng: ghi không đụng prefs cài đặt (listener/theme).
         session.restoreLanguage(stateStore().getString(Keys.KEYBOARD_LANGUAGE, null), proxy)
         hwSetting = settings.hardwareTelex

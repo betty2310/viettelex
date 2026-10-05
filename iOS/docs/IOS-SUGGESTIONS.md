@@ -269,7 +269,27 @@ dấu" ẩn); sau vuốt ⌫ trong lúc có chip số: iOS `[↩︎ Khôi phục
 | `showSuggestions` | true | Bật thanh gợi ý (bàn phím 246pt ↔ 216pt) |
 | `learnWords` | true | Cho phép học từ hay dùng |
 | `filterSensitive` | true | Lọc từ tục khỏi gợi ý |
+| `suggestInNoSuggestFields` | true | "Gợi ý cả khi ứng dụng tắt gợi ý" (#113) — xem dưới |
 | nút **Xóa từ đã học** | — | Xóa `userlm.bin` (+ `userlm.plist` cũ nếu còn); lần mở sau seed lại |
+
+## Ô ứng dụng tắt gợi ý (#113)
+
+Như Gboard/Laban: công tắc `suggestInNoSuggestFields` (mặc định BẬT, sao lưu, Android cùng key).
+Bảng quyết định THUẦN — iOS `StripMode.of/learns` (`FieldPolicy.swift`), Android `StripMode.of/learns`
+(`KeyboardSession.kt`); test `SuggestInNoSuggestFieldsTests` hai nền tảng.
+
+| Ô | BẬT | TẮT | Tự sửa | Học từ |
+|---|---|---|---|---|
+| Ô chữ app tắt gợi ý (iOS `autocorrectionType == .no`, Android `NO_SUGGESTIONS` / VISIBLE_PASSWORD giả ở ô chat) | gợi ý đầy đủ | chỉ thanh công cụ | KHÔNG | KHÔNG (cả khi tắt) |
+| Mật khẩu / OTP / ẩn danh (thủ công, Android NO_PERSONALIZED_LEARNING) / bàn số-SĐT-ngày | dải trống | dải trống | — | — |
+| Ô literal (URL thuần, username, FORCE_ASCII) | thanh công cụ (+ chip URL) | như bật | — | — |
+| Email | chip đuôi mail | như bật | — | — |
+
+- Ô địa chỉ / tìm kiếm (iOS `.URL`/`.webSearch` hoặc Enter = Go/Search; Android
+  `FieldMapping.isAddressOrSearch`): gợi ý chữ thường (`lowercaseSuggestions`).
+- iOS thanh địa chỉ ở chế độ đầy đủ: chip URL (`https://` `www.` `.com` `.vn`) chỉ ở "vị trí tên
+  miền" — ô trống, hoặc token trước con trỏ có "." / "://" (`StripMode.prefersURLChips`); còn
+  lại gợi ý chữ.
 
 ## Privacy
 

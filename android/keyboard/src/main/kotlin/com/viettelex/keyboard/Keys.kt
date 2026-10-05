@@ -71,6 +71,8 @@ object Keys {
     const val NUMBER_CHIPS = "numberChips"
     /** "Hiện kết quả phép tính" (Bool, mặc định BẬT) — chỉ đọc context ngay sau phím "=". */
     const val MATH_RESULTS = "mathResults"
+    /** "Gợi ý cả khi ứng dụng tắt gợi ý" (Bool, mặc định BẬT, #113) — cùng tên key iOS. */
+    const val SUGGEST_IN_NO_SUGGEST_FIELDS = "suggestInNoSuggestFields"
     const val FILTER_SENSITIVE = "filterSensitive"
     const val TEMPLATES_ENABLED = "templatesEnabled"
     const val SHOW_SPACE_LOGO = "showSpaceLogo"

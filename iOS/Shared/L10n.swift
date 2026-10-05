@@ -117,6 +117,8 @@ enum L10n {
         "Gợi ý emoji": "Emoji suggestions",
         "Chip số": "Number chips",
         "Hiện kết quả phép tính": "Show maths results",
+        "Gợi ý cả khi ứng dụng tắt gợi ý": "Suggest even when the app turns suggestions off",
+        "Ô mà ứng dụng tắt gợi ý (vd ô chat, thanh địa chỉ) vẫn gợi ý từ — không tự sửa, không học từ gõ ở đó. Mật khẩu, ẩn danh, ô số không bị ảnh hưởng.": "Fields where the app turns suggestions off (e.g. chat boxes, address bars) still get word suggestions — no auto-correct, and nothing typed there is learned. Passwords, incognito and number fields are unaffected.",
         "Nút Dán": "Paste button",
         "Lọc từ nhạy cảm": "Filter offensive words",
         "Từ điển cá nhân": "Personal dictionary",

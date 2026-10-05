@@ -273,4 +273,32 @@ class FieldMappingTest {
         val chrome = m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI or TYPE_TEXT_FLAG_NO_SUGGESTIONS, EditorInfo.IME_ACTION_GO)
         assertFalse(chrome.suggestionsAllowed); assertTrue(chrome.lowercaseSuggestions)
     }
+
+    /** #113 "Gợi ý cả khi ứng dụng tắt gợi ý": chỉ ô CHỮ app tắt gợi ý, không nhạy cảm/passthrough. */
+    @Test fun appNoSuggestionsMarksOnlyPlainTextFields() {
+        val ui = EditorInfo.IME_ACTION_GO
+        for (c in listOf(
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_MULTI_LINE or TYPE_TEXT_FLAG_NO_SUGGESTIONS),         // chat Messenger
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or TYPE_TEXT_FLAG_MULTI_LINE),  // chat "VISIBLE_PASSWORD" giả
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI or TYPE_TEXT_FLAG_NO_SUGGESTIONS, ui),      // Chrome omnibox
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_NO_SUGGESTIONS, EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING),
+        )) { assertTrue(c.appNoSuggestions); assertFalse(c.suggestionsAllowed) }
+        for (c in listOf(
+            m(TYPE_CLASS_TEXT),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_NO_SUGGESTIONS or TYPE_TEXT_FLAG_AUTO_CORRECT),      // Keep: muốn gợi ý
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_PASSWORD or TYPE_TEXT_FLAG_NO_SUGGESTIONS),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_VISIBLE_PASSWORD),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_EMAIL_ADDRESS or TYPE_TEXT_FLAG_NO_SUGGESTIONS),
+            m(TYPE_CLASS_TEXT or TYPE_TEXT_FLAG_NO_SUGGESTIONS, EditorInfo.IME_FLAG_FORCE_ASCII),
+            m(TYPE_CLASS_NUMBER), m(TYPE_CLASS_PHONE), m(TYPE_CLASS_DATETIME), m(TYPE_NULL),
+        )) assertFalse(c.appNoSuggestions)
+        // Ô địa chỉ tắt gợi ý ⇒ bật cài đặt thì gợi ý đầy đủ, vẫn chữ thường.
+        val chrome = m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI or TYPE_TEXT_FLAG_NO_SUGGESTIONS, ui)
+        val t = FieldTraits(isSecure = chrome.isSecure, passthrough = chrome.passthrough,
+            suggestionsAllowed = chrome.suggestionsAllowed, stripTools = chrome.stripTools,
+            lowercaseSuggestions = chrome.lowercaseSuggestions, appNoSuggestions = chrome.appNoSuggestions)
+        assertEquals(StripMode.FULL, StripMode.of(true, t, incognito = false, suggestAnyway = true))
+        assertEquals(StripMode.TOOLS, StripMode.of(true, t, incognito = false, suggestAnyway = false))
+        assertTrue(t.lowercaseSuggestions)
+    }
 }

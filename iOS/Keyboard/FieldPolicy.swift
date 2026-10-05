@@ -119,6 +119,26 @@ extension FieldTraits {
     /// Ô URL / thanh "tìm hoặc nhập địa chỉ" (Safari, Chrome — keyboardType .webSearch):
     /// chip `www.` `.com` `.vn` (+ `https://` khi ô trống) ở dải công cụ (URLChips).
     var wantsURLChips: Bool { inputKind == .url || inputKind == .search }
+
+    /// App tắt gợi ý (autocorrection = .no) ở ô CHỮ không nhạy cảm, không literal, không bàn số
+    /// (thanh địa chỉ Safari .webSearch, ô chat…) — song sinh Android `FieldTraits.appNoSuggestions`.
+    /// Cài đặt "Gợi ý cả khi ứng dụng tắt gợi ý" bật ⇒ vẫn gợi ý chữ (StripMode.full) nhưng
+    /// `allowsSuggestions` vẫn false ⇒ AutoCorrect.fieldAllows giữ TẮT; và không học từ.
+    var appNoSuggestions: Bool {
+        autocorrection == .no && !sensitive && !passthrough && inputKind != .number
+    }
+
+    /// Ô địa chỉ / tìm kiếm ⇒ gợi ý chữ thường (không DisplayCase tên riêng, không hoa đầu câu)
+    /// — song sinh Android `FieldMapping.isAddressOrSearch` (#113 thanh địa chỉ Firefox gõ
+    /// "bình" ra "Thường"). .URL / .webSearch, hoặc Enter = Go / Search / Google / Yahoo.
+    var lowercaseSuggestions: Bool {
+        guard !sensitive else { return false }
+        if inputKind == .url || inputKind == .search { return true }
+        switch returnKeyType {
+        case .go, .search, .google, .yahoo: return true
+        default: return false
+        }
+    }
 }
 
 /// Dải gợi ý hiện gì ở ô hiện tại — song sinh Android StripMode (#113). Chiều cao dải KHÔNG
@@ -137,11 +157,34 @@ enum StripMode: Equatable {
     /// Dải có vẽ nội dung (thanh công cụ ± gợi ý).
     var shown: Bool { self == .tools || self == .full }
 
-    /// THUẦN: công tắc + trait ô + ẩn danh → dải hiện gì.
-    static func of(showSuggestions: Bool, traits t: FieldTraits, incognito: Bool) -> StripMode {
+    /// THUẦN: công tắc + trait ô + ẩn danh → dải hiện gì. `suggestAnyway` = cài đặt "Gợi ý cả
+    /// khi ứng dụng tắt gợi ý" (#113): ô `appNoSuggestions` (không ẩn danh) ⇒ .full.
+    static func of(showSuggestions: Bool, traits t: FieldTraits, incognito: Bool,
+                   suggestAnyway: Bool = false) -> StripMode {
         guard showSuggestions else { return .off }
         if t.allowsSuggestions { return .full }
+        if overridesAppNoSuggest(suggestAnyway, traits: t, incognito: incognito) { return .full }
         if t.sensitive || incognito || t.inputKind == .number { return .blank }
         return .tools
+    }
+
+    /// Ô app tắt gợi ý mà VẪN gợi ý chữ (cài đặt bật, không nhạy cảm/literal/bàn số/ẩn danh).
+    static func overridesAppNoSuggest(_ suggestAnyway: Bool, traits t: FieldTraits, incognito: Bool) -> Bool {
+        suggestAnyway && t.appNoSuggestions && !t.allowsSuggestions && !incognito
+    }
+
+    /// THUẦN: học từ ở ô này? Ô app tắt gợi ý KHÔNG BAO GIỜ học (riêng tư — gợi ý ở đó chỉ
+    /// đọc), dù cài đặt bật hay tắt. Song sinh Android `StripMode.learns`.
+    static func learns(learnWords: Bool, traits t: FieldTraits?, incognito: Bool) -> Bool {
+        learnWords && !incognito && t?.appNoSuggestions != true
+    }
+
+    /// Ô URL / tìm kiếm ở chế độ .full: chip URL (URLChips) thay gợi ý chữ CHỈ ở "vị trí tên
+    /// miền" — ô trống, hoặc token trước con trỏ đã có "." / "://" (đang gõ địa chỉ); còn lại
+    /// gợi ý chữ như ô thường. Chế độ .tools: luôn chip URL như cũ.
+    static func prefersURLChips(before: String, after: String) -> Bool {
+        if before.isEmpty && after.isEmpty { return true }
+        let token = before.reversed().prefix { !$0.isWhitespace }
+        return token.contains(".") || String(token.reversed()).contains("://")
     }
 }

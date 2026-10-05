@@ -397,6 +397,7 @@ struct GoiYPage: View {
     @AppStorage("emojiSuggest", store: featureDefaults) private var emojiSuggest = true
     @AppStorage("numberChips", store: featureDefaults) private var numberChips = true
     @AppStorage("mathResults", store: featureDefaults) private var mathResults = true
+    @AppStorage("suggestInNoSuggestFields", store: featureDefaults) private var suggestInNoSuggestFields = true
     @AppStorage("pasteButton", store: featureDefaults) private var pasteButton = true
     @AppStorage("addTonesChip", store: featureDefaults) private var addTonesChip = false
 
@@ -406,6 +407,7 @@ struct GoiYPage: View {
                 // Thanh gợi ý bật = tự học từ hay dùng (learnWords đi theo — quyết định 2026-07-24).
                 settingToggle(L("Thanh gợi ý"), L("Gợi ý từ + emoji, tự học từ bạn hay dùng (chỉ trên máy)."), isOn: $showSuggestions)
                 if showSuggestions {
+                    settingToggle(L("Gợi ý cả khi ứng dụng tắt gợi ý"), L("Ô mà ứng dụng tắt gợi ý (vd ô chat, thanh địa chỉ) vẫn gợi ý từ — không tự sửa, không học từ gõ ở đó. Mật khẩu, ẩn danh, ô số không bị ảnh hưởng."), isOn: $suggestInNoSuggestFields)
                     settingToggle(L("Gợi ý emoji"), L("Emoji hợp với từ đang gõ (yêu → ❤️)."), isOn: $emojiSuggest)
                     settingToggle(L("Chip số"), L("Đọc số thành chữ, định dạng tiền (1tr2 → 1.200.000 ₫)."), isOn: $numberChips)
                     settingToggle(L("Hiện kết quả phép tính"), L("Gõ phép tính rồi dấu = (12*3=) → kết quả hiện ở đầu thanh gợi ý, chạm để chèn."), isOn: $mathResults)

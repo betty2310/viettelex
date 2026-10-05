@@ -49,6 +49,98 @@ final class StripModeTests: XCTestCase {
     }
 }
 
+/// #113 "Gợi ý cả khi ứng dụng tắt gợi ý" (mặc định BẬT, như Gboard/Laban): bảng quyết định
+/// loại ô × cài đặt → dải gợi ý, tự sửa (luôn tắt ở ô app tắt gợi ý), học từ (luôn tắt ở đó).
+/// Song sinh Android SuggestInNoSuggestFieldsTests.
+final class SuggestInNoSuggestFieldsTests: XCTestCase {
+    private struct Row {
+        let name: String, traits: FieldTraits, incognito: Bool
+        let on: StripMode, off: StripMode
+    }
+
+    private let table: [Row] = [
+        Row(name: "ô thường", traits: FieldTraits(), incognito: false, on: .full, off: .full),
+        Row(name: "ô chat tắt gợi ý", traits: FieldTraits(autocorrection: .no), incognito: false, on: .full, off: .tools),
+        Row(name: "thanh địa chỉ Safari", traits: FieldTraits(keyboardType: .webSearch, autocorrection: .no),
+            incognito: false, on: .full, off: .tools),
+        Row(name: "ô tắt gợi ý + ẩn danh", traits: FieldTraits(autocorrection: .no), incognito: true, on: .blank, off: .blank),
+        Row(name: "ô URL (literal)", traits: FieldTraits(keyboardType: .URL, autocorrection: .no, contentType: .URL),
+            incognito: false, on: .tools, off: .tools),
+        Row(name: "username (literal)", traits: FieldTraits(autocorrection: .no, contentType: .username),
+            incognito: false, on: .tools, off: .tools),
+        Row(name: "mật khẩu", traits: FieldTraits(autocorrection: .no, secure: true), incognito: false, on: .blank, off: .blank),
+        Row(name: "mật khẩu mới", traits: FieldTraits(autocorrection: .no, contentType: .newPassword),
+            incognito: false, on: .blank, off: .blank),
+        Row(name: "OTP", traits: FieldTraits(keyboardType: .numberPad, autocorrection: .no, contentType: .oneTimeCode),
+            incognito: false, on: .blank, off: .blank),
+        Row(name: "OTP bàn chữ", traits: FieldTraits(autocorrection: .no, contentType: .oneTimeCode),
+            incognito: false, on: .blank, off: .blank),
+        Row(name: "bàn số", traits: FieldTraits(keyboardType: .numberPad, autocorrection: .no), incognito: false, on: .blank, off: .blank),
+        Row(name: "SĐT", traits: FieldTraits(keyboardType: .phonePad, autocorrection: .no), incognito: false, on: .blank, off: .blank),
+        Row(name: "email (chip đuôi mail)", traits: FieldTraits(keyboardType: .emailAddress, autocorrection: .no),
+            incognito: false, on: .full, off: .full),
+    ]
+
+    func testDecisionTable() {
+        for r in table {
+            XCTAssertEqual(StripMode.of(showSuggestions: true, traits: r.traits, incognito: r.incognito, suggestAnyway: true),
+                           r.on, "\(r.name) / BẬT")
+            XCTAssertEqual(StripMode.of(showSuggestions: true, traits: r.traits, incognito: r.incognito, suggestAnyway: false),
+                           r.off, "\(r.name) / TẮT")
+            XCTAssertEqual(StripMode.of(showSuggestions: false, traits: r.traits, incognito: r.incognito, suggestAnyway: true),
+                           .off, r.name)
+            if r.traits.appNoSuggestions {
+                XCTAssertFalse(AutoCorrect.fieldAllows(r.traits), "\(r.name): không tự sửa")
+                XCTAssertFalse(StripMode.learns(learnWords: true, traits: r.traits, incognito: false), "\(r.name): không học")
+            }
+        }
+        XCTAssertTrue(StripMode.learns(learnWords: true, traits: FieldTraits(), incognito: false))
+        XCTAssertTrue(StripMode.learns(learnWords: true, traits: nil, incognito: false))
+        XCTAssertFalse(StripMode.learns(learnWords: true, traits: FieldTraits(), incognito: true))
+        XCTAssertFalse(StripMode.learns(learnWords: false, traits: FieldTraits(), incognito: false))
+        XCTAssertFalse(StripMode.learns(learnWords: true, traits: FieldTraits(autocorrection: .no), incognito: false))
+    }
+
+    func testAppNoSuggestionsOnlyPlainTextFields() {
+        XCTAssertTrue(FieldTraits(autocorrection: .no).appNoSuggestions)
+        XCTAssertTrue(FieldTraits(keyboardType: .webSearch, autocorrection: .no).appNoSuggestions)
+        XCTAssertFalse(FieldTraits().appNoSuggestions)
+        XCTAssertFalse(FieldTraits(autocorrection: .yes).appNoSuggestions)
+        XCTAssertFalse(FieldTraits(autocorrection: .no, secure: true).appNoSuggestions)
+        XCTAssertFalse(FieldTraits(autocorrection: .no, contentType: .oneTimeCode).appNoSuggestions)
+        XCTAssertFalse(FieldTraits(keyboardType: .emailAddress, autocorrection: .no).appNoSuggestions)
+        XCTAssertFalse(FieldTraits(keyboardType: .decimalPad, autocorrection: .no).appNoSuggestions)
+    }
+
+    func testLowercaseSuggestionsInAddressAndSearchFields() {
+        XCTAssertTrue(FieldTraits(keyboardType: .webSearch, autocorrection: .no).lowercaseSuggestions)
+        XCTAssertTrue(FieldTraits(keyboardType: .URL).lowercaseSuggestions)
+        XCTAssertTrue(FieldTraits(returnKeyType: .search).lowercaseSuggestions)
+        XCTAssertTrue(FieldTraits(returnKeyType: .go).lowercaseSuggestions)
+        XCTAssertFalse(FieldTraits().lowercaseSuggestions)
+        XCTAssertFalse(FieldTraits(returnKeyType: .send).lowercaseSuggestions)
+        XCTAssertFalse(FieldTraits(returnKeyType: .search, secure: true).lowercaseSuggestions)
+    }
+
+    /// Ô URL/tìm ở chế độ đầy đủ: chip URL chỉ khi ô trống / đang gõ tên miền; còn lại gợi ý chữ.
+    func testURLChipsOnlyAtDomainPositions() {
+        XCTAssertTrue(StripMode.prefersURLChips(before: "", after: ""))
+        XCTAssertTrue(StripMode.prefersURLChips(before: "github.", after: ""))
+        XCTAssertTrue(StripMode.prefersURLChips(before: "https://", after: ""))
+        XCTAssertTrue(StripMode.prefersURLChips(before: "xem vnexpress.net", after: ""))
+        XCTAssertFalse(StripMode.prefersURLChips(before: "bình", after: ""))
+        XCTAssertFalse(StripMode.prefersURLChips(before: "thời tiết ", after: ""))
+        XCTAssertFalse(StripMode.prefersURLChips(before: "", after: "abc"))
+    }
+
+    func testDefaultOnAndBackedUp() {
+        XCTAssertTrue(KeyboardSettings().suggestInNoSuggestFields)
+        guard case .bool(true)? = BackupSettings.byKey["suggestInNoSuggestFields"]?.kind else {
+            return XCTFail("thiếu spec sao lưu suggestInNoSuggestFields (bool, mặc định true)")
+        }
+    }
+}
+
 /// Regression: không gõ được tiếng Việt ở thanh địa chỉ Safari/Chrome và Spotlight
 /// (ô tìm kiếm tắt autocorrect) — passthrough không còn dựa vào autocorrect.
 final class FieldPolicyTests: XCTestCase {

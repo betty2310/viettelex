@@ -44,6 +44,12 @@ data class FieldConfig(
      * Firefox, #113): gợi ý chữ thường, không viết hoa đầu câu / tên riêng.
      */
     val lowercaseSuggestions: Boolean = false,
+    /**
+     * App tắt gợi ý ở ô CHỮ không nhạy cảm (NO_SUGGESTIONS / VISIBLE_PASSWORD giả ở ô chat), không
+     * passthrough — cài đặt "Gợi ý cả khi ứng dụng tắt gợi ý" bật thì vẫn gợi ý chữ (không tự sửa,
+     * không học). [suggestionsAllowed] vẫn false ⇒ AutoCorrect.fieldAllows giữ tắt.
+     */
+    val appNoSuggestions: Boolean = false,
 )
 
 object FieldMapping {
@@ -139,7 +145,8 @@ object FieldMapping {
             multiLine = multiLine,
             holdNewline = allowsHoldNewline(multiLine, secure, rawKeys),
             stripTools = text && !secure,
-            lowercaseSuggestions = isAddressOrSearch(inputType, imeOptions, multiLine, secure))
+            lowercaseSuggestions = isAddressOrSearch(inputType, imeOptions, multiLine, secure),
+            appNoSuggestions = noSuggest && !secure && !passthrough)
     }
 
     /**

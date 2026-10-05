@@ -67,6 +67,12 @@ data class FieldTraits(
      * luôn chữ thường (không tên riêng [DisplayCase], không hoa đầu câu) và không auto-shift.
      */
     val lowercaseSuggestions: Boolean = false,
+    /**
+     * App tắt gợi ý ở ô CHỮ không nhạy cảm (TYPE_TEXT_FLAG_NO_SUGGESTIONS / VISIBLE_PASSWORD giả ở
+     * ô chat — không mật khẩu, không passthrough). Cài đặt "Gợi ý cả khi ứng dụng tắt gợi ý" bật ⇒
+     * vẫn gợi ý chữ đầy đủ (như Gboard/Laban, #113) nhưng KHÔNG tự sửa và KHÔNG học từ.
+     */
+    val appNoSuggestions: Boolean = false,
 ) {
     /** Cách ghi chữ vào ô theo app (bảng [WriteMode.forPackage]). */
     val writeMode: WriteMode get() = WriteMode.forPackage(packageName)
@@ -87,17 +93,34 @@ enum class StripMode {
     val shown: Boolean get() = this == TOOLS || this == FULL
 
     companion object {
-        /** Gợi ý chữ được bật ở ô (kể cả chip đuôi mail ô email) = [KeyboardSession.suggestionsActive]. */
-        fun wordsActive(showSuggestions: Boolean, f: FieldTraits): Boolean = showSuggestions &&
-            ((f.suggestionsAllowed && !f.isSecure && !f.passthrough) || (f.emailField && !f.isSecure))
+        /**
+         * Ô app tắt gợi ý nhưng vẫn gợi ý chữ ("Gợi ý cả khi ứng dụng tắt gợi ý" [suggestAnyway],
+         * #113). Không bao giờ ở mật khẩu / passthrough (email, số, FORCE_ASCII, TYPE_NULL) / ẩn danh.
+         */
+        fun overridesAppNoSuggest(suggestAnyway: Boolean, f: FieldTraits, incognito: Boolean): Boolean =
+            suggestAnyway && f.appNoSuggestions && !f.isSecure && !f.passthrough && !incognito
 
-        /** THUẦN: ô + cài đặt → dải hiện gì. [incognito] = ẩn danh thủ công HOẶC NO_PERSONALIZED_LEARNING. */
-        fun of(showSuggestions: Boolean, field: FieldTraits, incognito: Boolean): StripMode = when {
+        /** Gợi ý chữ được bật ở ô (kể cả chip đuôi mail ô email) = [KeyboardSession.suggestionsActive]. */
+        fun wordsActive(showSuggestions: Boolean, f: FieldTraits, overrideNoSuggest: Boolean = false): Boolean = showSuggestions &&
+            ((f.suggestionsAllowed && !f.isSecure && !f.passthrough) || (f.emailField && !f.isSecure) || overrideNoSuggest)
+
+        /**
+         * THUẦN: ô + cài đặt → dải hiện gì. [incognito] = ẩn danh thủ công HOẶC NO_PERSONALIZED_LEARNING.
+         * [suggestAnyway] = cài đặt "Gợi ý cả khi ứng dụng tắt gợi ý" ([overridesAppNoSuggest]).
+         */
+        fun of(showSuggestions: Boolean, field: FieldTraits, incognito: Boolean, suggestAnyway: Boolean = false): StripMode = when {
             !showSuggestions -> OFF
-            wordsActive(true, field) -> FULL
+            wordsActive(true, field, overridesAppNoSuggest(suggestAnyway, field, incognito)) -> FULL
             field.isSecure || incognito || !field.stripTools -> BLANK
             else -> TOOLS
         }
+
+        /**
+         * THUẦN: học từ ở ô này? Ô app tắt gợi ý ([FieldTraits.appNoSuggestions]) KHÔNG BAO GIỜ học
+         * (riêng tư — app đã ra hiệu; gợi ý ở đó chỉ đọc), dù cài đặt gợi ý-bất-chấp bật hay tắt.
+         */
+        fun learns(learnWords: Boolean, field: FieldTraits, incognito: Boolean): Boolean =
+            learnWords && !incognito && !field.appNoSuggestions
     }
 }
 
@@ -377,15 +400,16 @@ class KeyboardSession(
         lastKeyWasEmailTrigger = false
         clearUndo()
         incognito = settings.incognito || field.noLearning
-        learnEnabled = settings.learnWords && !incognito
+        learnEnabled = StripMode.learns(settings.learnWords, field, incognito)
         initialCapsPending = true
         filterSensitive = settings.filterSensitive
         swipeEnglish = settings.swipeEnglish
         autoCapitalize = settings.autoCapitalize
         recentEnglish.clear(); langRecent.clear()
         emailBar = settings.showSuggestions && field.emailField && !field.isSecure
-        suggestionsActive = StripMode.wordsActive(settings.showSuggestions, field)
-        stripMode = StripMode.of(settings.showSuggestions, field, incognito)
+        suggestionsActive = StripMode.wordsActive(settings.showSuggestions, field,
+            StripMode.overridesAppNoSuggest(settings.suggestInNoSuggestFields, field, incognito))
+        stripMode = StripMode.of(settings.showSuggestions, field, incognito, settings.suggestInNoSuggestFields)
         lastWord = null; lastWord2 = null
         lastInsertWasSpace = false
         lastCommit = null
@@ -400,7 +424,7 @@ class KeyboardSession(
         language = KeyboardLanguage.VI
         autoSpaceOn = settings.autoSpaceAfterPunct && !field.isSecure && !field.passthrough && !field.urlField
         autoSpacePunct = null; autoSpaceUnderLetter = null
-        // Tự sửa: không ở ô mật khẩu/email/URL/không-gợi-ý, ô tên (viết hoa mỗi từ), VNI.
+        // Tự sửa: không ở ô mật khẩu/email/URL/không-gợi-ý (kể cả khi vẫn gợi ý bất chấp app — chỉ gợi ý), ô tên (viết hoa mỗi từ), VNI.
         autoCorrectOn = settings.autoCorrect && !settings.vniMode && AutoCorrect.fieldAllows(field)
         wordTouches.clear(); wordTouchesOk = false
         bridge.autoCorrector = if (autoCorrectOn) ::autoCorrection else null

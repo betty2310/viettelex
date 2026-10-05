@@ -219,7 +219,9 @@ final class KeyboardViewController: UIInputViewController {
         clip.load(from: UserDefaultsProvider.shared)
         pasteOnce.reload(offeredID: Self.loadPasteOffered())
         // Ẩn danh (thủ công, trong app): không học từ, không lưu clipboard.
-        learnEnabled = settings.learnWords && !clip.incognito
+        learnWordsSetting = settings.learnWords
+        learnEnabled = settings.learnWords && !clip.incognito   // refreshFieldTraits tinh chỉnh theo ô
+        suggestAnywaySetting = settings.suggestInNoSuggestFields
         keyboard.setClipboardButton(visible: clip.historyEnabled && hasFullAccess)
         filterSensitive = settings.filterSensitive
         showSuggestionsSetting = settings.showSuggestions
@@ -548,8 +550,12 @@ final class KeyboardViewController: UIInputViewController {
         // Thanh gợi ý: gate qua toggle trong app. Ô từ chối gợi ý chữ (autocorrection = .no:
         // thanh địa chỉ Safari…) mà không nhạy cảm ⇒ thanh CÔNG CỤ (☰/📋/⌄ + Dán + chip URL)
         // thay vì dải trống; mật khẩu/OTP/ẩn danh/bàn số giữ dải trống (StripMode).
+        // #113 "Gợi ý cả khi ứng dụng tắt gợi ý" (mặc định bật): ô .no không nhạy cảm ⇒ gợi ý
+        // đầy đủ, nhưng tự sửa vẫn tắt (allowsSuggestions false ở trên) và không học từ.
         let mode = StripMode.of(showSuggestions: showSuggestionsSetting, traits: t,
-                                incognito: clip.incognito)
+                                incognito: clip.incognito, suggestAnyway: suggestAnywaySetting)
+        learnEnabled = StripMode.learns(learnWords: learnWordsSetting, traits: t, incognito: clip.incognito)
+        lowercaseSuggestions = t.lowercaseSuggestions
         let active = mode.shown
         let modeChanged = mode != stripMode
         stripMode = mode
@@ -1048,6 +1054,12 @@ final class KeyboardViewController: UIInputViewController {
     private var stripMode = StripMode.full
     /// Chip URL đang hiện (ô URL / thanh địa chỉ ở chế độ .tools — URLChips); rỗng ở ô khác.
     private var urlChips: [URLChips.Chip] = []
+    /// Cài đặt "Gợi ý cả khi ứng dụng tắt gợi ý" (KeyboardSettings.suggestInNoSuggestFields).
+    private var suggestAnywaySetting = true
+    /// KeyboardSettings.learnWords — learnEnabled tính lại theo ô (StripMode.learns).
+    private var learnWordsSetting = true
+    /// Ô địa chỉ / tìm kiếm (FieldTraits.lowercaseSuggestions): gợi ý chữ thường.
+    private var lowercaseSuggestions = false
     /// Phím vừa gõ là "@" hoặc "." → rule email/TLD mới có thể ăn; chỉ khi đó
     /// mới đáng trả giá XPC đọc documentContextBeforeInput.
     private var lastKeyWasEmailTrigger = false
@@ -1292,7 +1304,13 @@ final class KeyboardViewController: UIInputViewController {
 
     /// đầu câu (auto-shift): gợi ý viết hoa chữ đầu như stock (Em, Anh, Tôi)
     private func caseForContext(_ w: String) -> String {
-        autoShiftOn ? w.prefix(1).uppercased() + w.dropFirst() : w
+        if lowercaseSuggestions { return w.lowercased() }
+        return autoShiftOn ? w.prefix(1).uppercased() + w.dropFirst() : w
+    }
+
+    /// DisplayCase (tên riêng) — trừ ô địa chỉ / tìm kiếm: chữ thường (song sinh Android).
+    private func displayCase(_ w: String, after prev: String? = nil) -> String {
+        lowercaseSuggestions ? w.lowercased() : DisplayCase.apply(w, after: prev)
     }
 
     /// Đệm danh sách gợi ý cho ĐỦ `need` phần tử bằng từ hay dùng nhất (loại
@@ -1318,6 +1336,17 @@ final class KeyboardViewController: UIInputViewController {
         if stripMode == .tools {
             showToolsOnly(composing: !composed.isEmpty)
             return
+        }
+        // Ô URL / tìm kiếm ở chế độ đầy đủ (gợi ý bất chấp app, #113): chip URL chỉ ở "vị trí
+        // tên miền" (ô trống / token có "." hoặc "://"), còn lại gợi ý chữ.
+        if fieldTraits?.wantsURLChips == true {
+            let p = textDocumentProxy
+            let before = p.documentContextBeforeInput ?? "", after = p.documentContextAfterInput ?? ""
+            if StripMode.prefersURLChips(before: before, after: after),
+               !URLChips.chips(before: before, after: after).isEmpty {
+                showToolsOnly(composing: !composed.isEmpty)
+                return
+            }
         }
         // Ô email (literal): thanh chỉ hiện chip đuôi mail sau "@" ("@gmail.com" trước) —
         // đọc context mỗi phím CHỈ ở ô email; ô khác không qua nhánh này.
@@ -1509,8 +1538,8 @@ final class KeyboardViewController: UIInputViewController {
                 SuggestRank.rankInline(pool, pmi: pmi, typedLen: composed.count,
                                        count: { lm.count(of: $0) }, ctx: ctxCache),
                 enabled: filterSensitive)
-            set.word = ranked.first.map { DisplayCase.apply($0, after: lastWord) }
-            set.word2 = ranked.dropFirst().first.map { DisplayCase.apply($0, after: lastWord) }
+            set.word = ranked.first.map { displayCase($0, after: lastWord) }
+            set.word2 = ranked.dropFirst().first.map { displayCase($0, after: lastWord) }
         } else if let fix {
             // Thử nghiệm: không từ nào khớp → nghi chạm trượt phím kề; đưa bản sửa
             // lên slot chính (tap để thay, không tự thay).

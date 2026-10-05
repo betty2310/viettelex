@@ -382,6 +382,9 @@ private fun GoiYPage(onBack: () -> Unit) {
     VTSection(header = tr("Thanh gợi ý")) {
         BoolToggle(Keys.SHOW_SUGGESTIONS, Prefs.D.showSuggestions, tr("Thanh gợi ý"), tr("Gợi ý từ + emoji, tự học từ bạn hay dùng (chỉ trên máy)."))
         RowDivider()
+        BoolToggle(Keys.SUGGEST_IN_NO_SUGGEST_FIELDS, Prefs.D.suggestInNoSuggestFields, tr("Gợi ý cả khi ứng dụng tắt gợi ý"),
+            tr("Ô mà ứng dụng tắt gợi ý (vd ô chat, thanh địa chỉ) vẫn gợi ý từ — không tự sửa, không học từ gõ ở đó. Mật khẩu, ẩn danh, ô số không bị ảnh hưởng."))
+        RowDivider()
         BoolToggle(Keys.NUMBER_CHIPS, Prefs.D.numberChips, tr("Chip số"), tr("Đọc số thành chữ, định dạng tiền (1tr2 → 1.200.000 ₫)."))
         RowDivider()
         BoolToggle(Keys.MATH_RESULTS, Prefs.D.mathResults, tr("Hiện kết quả phép tính"), tr("Gõ phép tính rồi dấu = (12*3=) → kết quả hiện ở đầu thanh gợi ý, chạm để chèn."))
