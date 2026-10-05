@@ -25,21 +25,27 @@ import Carbon.HIToolbox
 /// XUỐNG (subset thật sự của target); mọi thứ khác disarm.
 struct ModifierChordRecognizer {
     private var armed = false
+    /// Lượt bấm này đã "bẩn": có thêm modifier ngoài chord hoặc có phím thường / click chen
+    /// giữa. Giữ tới khi NHẢ SẠCH mọi modifier — không được armed lại khi đường nhả đi ngang
+    /// qua đúng tổ hợp (#114: ⌃⇧⌘4 chụp màn hình, nhả ⌘ trước còn ⌃⇧ ⇒ từng bị chuyển bộ gõ).
+    private var spoiled = false
     /// Bốn modifier tham gia so khớp — các bit device-dependent/caps-lock bị lọc.
     static let relevant: CGEventFlags = [.maskControl, .maskShift, .maskAlternate, .maskCommand]
 
     /// Gọi cho mỗi flagsChanged. Trả về true đúng một lần khi chord hoàn tất.
     mutating func note(flags: CGEventFlags, target: CGEventFlags) -> Bool {
         let held = flags.intersection(Self.relevant)
-        if held == target { armed = true; return false }
+        if held.isEmpty { defer { armed = false; spoiled = false }; return armed && !spoiled }
+        if !held.subtracting(target).isEmpty { armed = false; spoiled = true; return false }
+        if held == target { if !spoiled { armed = true }; return false }
+        // Nhả bớt (held ⊂ target) từ trạng thái armed = chord xong.
         defer { armed = false }
-        // Nhả bớt (held ⊂ target, kể cả nhả sạch) từ trạng thái armed = chord xong.
-        // Thêm modifier khác (held ⊄ target) = đổi ý sang chord khác → chỉ disarm.
-        return armed && held.subtracting(target).isEmpty
+        return armed && !spoiled
     }
 
-    /// Bất kỳ phím thường / click chuột nào giữa lúc giữ chord → không phải toggle.
-    mutating func disarm() { armed = false }
+    /// Bất kỳ phím thường / click chuột nào giữa lúc giữ chord → không phải toggle (tới khi
+    /// nhả sạch modifier).
+    mutating func disarm() { armed = false; spoiled = true }
 }
 
 enum SwitchHotkey {

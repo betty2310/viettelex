@@ -43,6 +43,25 @@ final class SwitchHotkeyTests: XCTestCase {
                             ctrlShift, []], target: ctrlShift), 1)
     }
 
+    /// #114: ⌃⇧⌘4 (chụp màn hình) — nhả ⌘ trước thì đường nhả đi ngang ⌃⇧; phím 4 chen
+    /// giữa. Không được chuyển bộ gõ. Lượt ⌃⇧ sạch kế tiếp vẫn phải fire.
+    func testScreenshotChordDoesNotToggle() {
+        let all: CGEventFlags = [.maskControl, .maskShift, .maskCommand]
+        // ⌃ → ⌃⇧ → ⌃⇧⌘ → (4) → nhả ⌘ còn ⌃⇧ → ⇧ → rỗng.
+        XCTAssertEqual(run([[.maskControl], ctrlShift, all, ctrlShift, [.maskShift], []],
+                           target: ctrlShift, interruptAt: 3), 0)
+        // Không có phím 4 chen giữa cũng vậy (⌃⇧⌘ rồi nhả ⌘ trước).
+        XCTAssertEqual(run([ctrlShift, all, ctrlShift, []], target: ctrlShift), 0)
+        // Bắt đầu bằng ⌘⇧ rồi thêm ⌃ (⌘⇧⌃4) rồi nhả ⌘: không fire.
+        XCTAssertEqual(run([[.maskCommand, .maskShift], all, ctrlShift, []], target: ctrlShift), 0)
+        // Phím thường chen khi giữ ⌃⇧, nhả ⇧ trước (còn ⌃) rồi bấm lại ⇧: vẫn bẩn tới khi nhả sạch.
+        XCTAssertEqual(run([ctrlShift, [.maskControl], ctrlShift, []], target: ctrlShift,
+                           interruptAt: 1), 0)
+        // Sau đó một lượt ⌃⇧ sạch: fire đúng 1 lần.
+        XCTAssertEqual(run([ctrlShift, all, ctrlShift, [], [.maskControl], ctrlShift, []],
+                           target: ctrlShift), 1)
+    }
+
     func testWrongComboNeverFires() {
         XCTAssertEqual(run([[.maskCommand, .maskShift], []], target: ctrlShift), 0)
         XCTAssertEqual(run([[.maskShift], []], target: ctrlShift), 0)
