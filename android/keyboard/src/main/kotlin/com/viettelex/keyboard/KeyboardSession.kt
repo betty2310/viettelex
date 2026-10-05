@@ -116,11 +116,13 @@ enum class StripMode {
         }
 
         /**
-         * THUẦN: học từ ở ô này? Ô app tắt gợi ý ([FieldTraits.appNoSuggestions]) KHÔNG BAO GIỜ học
-         * (riêng tư — app đã ra hiệu; gợi ý ở đó chỉ đọc), dù cài đặt gợi ý-bất-chấp bật hay tắt.
+         * THUẦN: học từ ở ô này? Ô app tắt gợi ý ([FieldTraits.appNoSuggestions]) VẪN học như ô
+         * thường (Phil 05/10: ô chat Messenger là nơi gõ nhiều nhất); ô nhạy cảm (mật khẩu, OTP, số)
+         * không bao giờ thành appNoSuggestions và đã không học ở tầng khác; ẩn danh thì không học.
          */
+        @Suppress("UNUSED_PARAMETER")
         fun learns(learnWords: Boolean, field: FieldTraits, incognito: Boolean): Boolean =
-            learnWords && !incognito && !field.appNoSuggestions
+            learnWords && !incognito
     }
 }
 

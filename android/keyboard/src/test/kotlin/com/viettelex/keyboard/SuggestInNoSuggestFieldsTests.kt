@@ -48,8 +48,8 @@ class SuggestInNoSuggestFieldsTests {
             assertEquals("${r.name} / thanh gợi ý tắt", StripMode.OFF, StripMode.of(false, r.field, r.incognito, suggestAnyway = true))
             // Tự sửa không bao giờ chạy ở ô app tắt gợi ý (suggestionsAllowed vẫn false).
             if (r.field.appNoSuggestions) assertFalse(r.name, AutoCorrect.fieldAllows(r.field))
-            // Không học ở ô app tắt gợi ý, dù cài đặt bật hay tắt.
-            if (r.field.appNoSuggestions) assertFalse(r.name, StripMode.learns(true, r.field, r.incognito))
+            // Ô app tắt gợi ý vẫn học như ô thường (trừ ẩn danh).
+            if (r.field.appNoSuggestions && !r.incognito) assertTrue(r.name, StripMode.learns(true, r.field, r.incognito))
         }
         assertTrue(StripMode.learns(true, FieldTraits(), incognito = false))
         assertFalse(StripMode.learns(true, FieldTraits(), incognito = true))

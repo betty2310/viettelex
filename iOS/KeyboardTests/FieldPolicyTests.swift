@@ -91,14 +91,14 @@ final class SuggestInNoSuggestFieldsTests: XCTestCase {
                            .off, r.name)
             if r.traits.appNoSuggestions {
                 XCTAssertFalse(AutoCorrect.fieldAllows(r.traits), "\(r.name): không tự sửa")
-                XCTAssertFalse(StripMode.learns(learnWords: true, traits: r.traits, incognito: false), "\(r.name): không học")
+                XCTAssertTrue(StripMode.learns(learnWords: true, traits: r.traits, incognito: false), "\(r.name): vẫn học")
             }
         }
         XCTAssertTrue(StripMode.learns(learnWords: true, traits: FieldTraits(), incognito: false))
         XCTAssertTrue(StripMode.learns(learnWords: true, traits: nil, incognito: false))
         XCTAssertFalse(StripMode.learns(learnWords: true, traits: FieldTraits(), incognito: true))
         XCTAssertFalse(StripMode.learns(learnWords: false, traits: FieldTraits(), incognito: false))
-        XCTAssertFalse(StripMode.learns(learnWords: true, traits: FieldTraits(autocorrection: .no), incognito: false))
+        XCTAssertTrue(StripMode.learns(learnWords: true, traits: FieldTraits(autocorrection: .no), incognito: false))
     }
 
     func testAppNoSuggestionsOnlyPlainTextFields() {

@@ -173,10 +173,11 @@ enum StripMode: Equatable {
         suggestAnyway && t.appNoSuggestions && !t.allowsSuggestions && !incognito
     }
 
-    /// THUẦN: học từ ở ô này? Ô app tắt gợi ý KHÔNG BAO GIỜ học (riêng tư — gợi ý ở đó chỉ
-    /// đọc), dù cài đặt bật hay tắt. Song sinh Android `StripMode.learns`.
+    /// THUẦN: học từ ở ô này? Ô app tắt gợi ý VẪN học như ô thường (Phil 05/10 — ô chat là nơi
+    /// gõ nhiều nhất); ô nhạy cảm không bao giờ là appNoSuggestions; ẩn danh thì không học.
+    /// Song sinh Android `StripMode.learns`.
     static func learns(learnWords: Bool, traits t: FieldTraits?, incognito: Bool) -> Bool {
-        learnWords && !incognito && t?.appNoSuggestions != true
+        learnWords && !incognito
     }
 
     /// Ô URL / tìm kiếm ở chế độ .full: chip URL (URLChips) thay gợi ý chữ CHỈ ở "vị trí tên
